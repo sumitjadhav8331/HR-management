@@ -91,6 +91,7 @@ export default async function AttendancePage({
                       <TableHead>Login</TableHead>
                       <TableHead>Logout</TableHead>
                       <TableHead>Total Hours</TableHead>
+                      <TableHead>Location</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -111,6 +112,20 @@ export default async function AttendancePage({
                         <TableCell>{formatDateTime(record.login_time)}</TableCell>
                         <TableCell>{formatDateTime(record.logout_time)}</TableCell>
                         <TableCell>{formatHours(record.total_hours)}</TableCell>
+                        <TableCell>
+                          {record.latitude && record.longitude ? (
+                            <a
+                              className="text-xs text-primary underline"
+                              href={`https://www.google.com/maps?q=${record.latitude},${record.longitude}`}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              View map
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Not captured</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-2">
                             <Link

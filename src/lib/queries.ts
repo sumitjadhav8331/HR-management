@@ -124,12 +124,14 @@ export async function getDashboardData(date?: string) {
     attendanceMap.set(item.attendance_date, value + 1);
   });
 
+
   return {
     selectedDate,
     hrName: getUserLabel(profile, user.email),
     metrics: {
       totalEmployees: employeeCountResult.count ?? 0,
       presentToday: presentTodayResult.count ?? 0,
+      absentToday: Math.max((employeeCountResult.count ?? 0) - (presentTodayResult.count ?? 0), 0),
       callsMadeToday: callsTodayResult.count ?? 0,
       tasksCompleted: tasksCompletedTodayResult.count ?? 0,
     },
@@ -439,7 +441,7 @@ export async function buildDailyReportSummary(
   const { user, profile } = await requireProfile();
   const supabase = await createServerSupabaseClient();
 
-  const [candidatesResult, attendanceResult, tasksResult, notesResult] =
+  const [candidatesResult, attendanceResult, tasksResult, notesResult, employeesResult] =
     await Promise.all([
       supabase.from("candidates").select("*").eq("call_date", date),
       supabase
@@ -448,6 +450,7 @@ export async function buildDailyReportSummary(
         .eq("attendance_date", date),
       supabase.from("tasks").select("*"),
       supabase.from("notes").select("*").eq("note_date", date),
+      supabase.from("employees").select("name").eq("status", "active"),
     ]);
 
   const candidates = candidatesResult.data ?? [];
@@ -456,6 +459,7 @@ export async function buildDailyReportSummary(
   })[]) ?? [];
   const tasks = tasksResult.data ?? [];
   const notes = notesResult.data ?? [];
+  const activeEmployees = employeesResult.data ?? [];
 
   const joined = candidates.filter((candidate) => candidate.final_status === "joined").length;
   const interested = candidates.filter(
@@ -473,6 +477,10 @@ export async function buildDailyReportSummary(
   const pendingTasks = tasks
     .filter((task) => task.status === "pending")
     .map((task) => task.title);
+  const presentEmployees = attendance.map((entry) => entry.employee?.name ?? "Unknown employee");
+  const absentEmployees = activeEmployees
+    .map((employee) => employee.name)
+    .filter((name) => !presentEmployees.includes(name));
 
   return {
     date,
@@ -490,9 +498,12 @@ export async function buildDailyReportSummary(
     },
     attendance: {
       presentCount: attendance.length,
-      employees: attendance.map(
-        (entry) => entry.employee?.name ?? "Unknown employee",
-      ),
+      absentCount: absentEmployees.length,
+      employees: presentEmployees,
+      absentEmployees,
+      locations: attendance
+        .filter((entry) => entry.latitude && entry.longitude)
+        .map((entry) => `${entry.employee?.name ?? "Unknown"}: ${entry.latitude}, ${entry.longitude}`),
     },
     tasks: {
       completed: completedTasks,
@@ -542,5 +553,32 @@ export async function getReportsPageData({ page, date }: SearchParamsInput) {
     preview,
     reports,
     pagination: buildPagination(reportsResult.count ?? 0, page ?? 1, PAGE_SIZE),
+  };
+}
+
+export async function getSalariesPageData({ page, editId }: SearchParamsInput) {
+  await requireProfile();
+  const supabase = await createServerSupabaseClient();
+  const offset = ((page ?? 1) - 1) * PAGE_SIZE;
+
+  const [recordsResult, editResult, employees] = await Promise.all([
+    supabase
+      .from("salaries")
+      .select("*, employee:employees(id, name, department)", { count: "exact" })
+      .order("month", { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1),
+    editId
+      ? supabase.from("salaries").select("*").eq("id", editId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    getEmployeeOptions(),
+  ]);
+
+  return {
+    salaries: (recordsResult.data ?? []) as (Tables<"salaries"> & {
+      employee: Pick<Tables<"employees">, "id" | "name" | "department"> | null;
+    })[],
+    editingSalary: (editResult.data ?? null) as Tables<"salaries"> | null,
+    employees,
+    pagination: buildPagination(recordsResult.count ?? 0, page ?? 1, PAGE_SIZE),
   };
 }

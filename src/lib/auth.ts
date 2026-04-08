@@ -43,7 +43,10 @@ export async function ensureUserRecord(user: User) {
         typeof user.user_metadata?.full_name === "string"
           ? user.user_metadata.full_name
           : null,
-      role: "hr",
+      role:
+        user.user_metadata?.role === "employee"
+          ? "employee"
+          : "hr",
     },
     { onConflict: "id" },
   );

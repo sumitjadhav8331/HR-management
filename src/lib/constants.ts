@@ -16,3 +16,6 @@ export const taskPriorities = ["low", "medium", "high", "urgent"] as const;
 export const taskStatuses = ["pending", "completed"] as const;
 export const noteKinds = ["daily_note", "self_task"] as const;
 export const noteStatuses = ["open", "done"] as const;
+export const userRoles = ["hr", "employee"] as const;
+export const leaveStatuses = ["pending", "approved", "rejected"] as const;
+export const salaryPaymentStatuses = ["pending", "paid"] as const;

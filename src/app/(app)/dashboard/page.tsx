@@ -3,6 +3,7 @@ import {
   ClipboardList,
   PhoneCall,
   UsersRound,
+  UserX,
 } from "lucide-react";
 import { deleteNoteAction, toggleNoteStatusAction } from "@/app/actions/notes";
 import { ReportGenerator } from "@/components/forms/report-generator";
@@ -44,7 +45,7 @@ export default async function DashboardPage({
         </form>
       </PageHeader>
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           helper="Employees tracked in the system"
           icon={<UsersRound className="h-5 w-5" />}
@@ -56,6 +57,12 @@ export default async function DashboardPage({
           icon={<ClipboardList className="h-5 w-5" />}
           label="Present Today"
           value={String(dashboard.metrics.presentToday)}
+        />
+        <MetricCard
+          helper={`No check-in on ${formatDate(dashboard.selectedDate)}`}
+          icon={<UserX className="h-5 w-5" />}
+          label="Absent Today"
+          value={String(dashboard.metrics.absentToday)}
         />
         <MetricCard
           helper="Candidate conversations logged"

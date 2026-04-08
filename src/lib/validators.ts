@@ -7,6 +7,8 @@ import {
   noteStatuses,
   taskPriorities,
   taskStatuses,
+  leaveStatuses,
+  salaryPaymentStatuses,
 } from "@/lib/constants";
 
 const optionalEmailSchema = z
@@ -43,6 +45,9 @@ export const attendanceSchema = z
     attendance_date: z.string().trim().min(1, "Attendance date is required."),
     login_time: z.string().trim().min(1, "Login time is required."),
     logout_time: z.string().trim().optional(),
+    latitude: z.coerce.number().min(-90).max(90).optional(),
+    longitude: z.coerce.number().min(-180).max(180).optional(),
+    address: z.string().trim().optional(),
   })
   .refine(
     (value) =>
@@ -77,6 +82,7 @@ export const leaveSchema = z.object({
   employee_id: z.string().uuid("Select an employee."),
   date: z.string().trim().min(1, "Leave date is required."),
   reason: z.string().trim().min(3, "Leave reason is required."),
+  status: z.enum(leaveStatuses).default("pending"),
 });
 
 export const noteSchema = z.object({
@@ -90,4 +96,15 @@ export const noteSchema = z.object({
 export const reportSchema = z.object({
   date: z.string().trim().min(1, "Report date is required."),
   overall_notes: z.string().trim().optional(),
+});
+
+
+export const salarySchema = z.object({
+  employee_id: z.string().uuid("Select an employee."),
+  amount: z.coerce.number().min(0, "Amount must be positive."),
+  bonus: z.coerce.number().min(0).default(0),
+  deduction: z.coerce.number().min(0).default(0),
+  month: z.string().trim().min(1, "Month is required."),
+  payment_status: z.enum(salaryPaymentStatuses).default("pending"),
+  notes: z.string().trim().optional(),
 });

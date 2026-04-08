@@ -120,8 +120,12 @@ export async function generateDailyReportPdf(summary: DailyReportSummary) {
 
   drawSection("Attendance Summary", [
     `Employees present: ${summary.attendance.presentCount}`,
+    `Employees absent: ${summary.attendance.absentCount}`,
     ...summary.attendance.employees.map((name) => `Present: ${name}`),
+    ...summary.attendance.absentEmployees.map((name) => `Absent: ${name}`),
   ]);
+
+  drawSection("Login Location Summary", summary.attendance.locations);
 
   drawSection("Task Summary", [
     `Completed tasks: ${summary.tasks.completed.length}`,

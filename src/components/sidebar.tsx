@@ -8,6 +8,8 @@ import {
   CalendarDays,
   FileSpreadsheet,
   LayoutDashboard,
+  Landmark,
+  UserCircle2,
   NotebookPen,
   UsersRound,
   X,
@@ -25,6 +27,8 @@ const navItems = [
   { href: "/tasks", label: "Tasks", icon: NotebookPen },
   { href: "/leaves", label: "Leaves", icon: CalendarDays },
   { href: "/reports", label: "Reports", icon: FileSpreadsheet },
+  { href: "/salary", label: "Salary", icon: Landmark },
+  { href: "/profile", label: "Profile", icon: UserCircle2 },
 ];
 
 export function Sidebar({

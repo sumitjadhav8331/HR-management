@@ -1,8 +1,9 @@
 "use client";
 
 import { format } from "date-fns";
+import { LocateFixed } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useTransition } from "react";
+import { type FormEvent, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { saveAttendanceAction } from "@/app/actions/attendance";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ export function AttendanceForm({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [locationPending, setLocationPending] = useState(false);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,6 +52,32 @@ export function AttendanceForm({
       router.refresh();
       form.reset();
     });
+  }
+
+  function captureLocation() {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported in this browser.");
+      return;
+    }
+
+    setLocationPending(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latInput = document.getElementById("latitude") as HTMLInputElement | null;
+        const lngInput = document.getElementById("longitude") as HTMLInputElement | null;
+
+        if (latInput) latInput.value = position.coords.latitude.toFixed(7);
+        if (lngInput) lngInput.value = position.coords.longitude.toFixed(7);
+
+        toast.success("Location captured.");
+        setLocationPending(false);
+      },
+      () => {
+        toast.error("Unable to fetch your location. Please allow permission.");
+        setLocationPending(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
   }
 
   return (
@@ -107,6 +135,29 @@ export function AttendanceForm({
               defaultValue={toLocalDateTimeValue(initialData?.logout_time)}
             />
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="latitude">Latitude</Label>
+              <Input id="latitude" name="latitude" type="number" step="0.0000001" defaultValue={initialData?.latitude ?? ""} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="longitude">Longitude</Label>
+              <Input id="longitude" name="longitude" type="number" step="0.0000001" defaultValue={initialData?.longitude ?? ""} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="address">Address (optional)</Label>
+            <Input id="address" name="address" defaultValue={initialData?.address ?? ""} />
+          </div>
+          <Button
+            disabled={pending || locationPending}
+            type="button"
+            variant="outline"
+            onClick={captureLocation}
+          >
+            <LocateFixed className="mr-2 h-4 w-4" />
+            {locationPending ? "Capturing location..." : "Use current location"}
+          </Button>
           <Button disabled={pending} type="submit">
             {pending ? "Saving..." : initialData ? "Update attendance" : "Save attendance"}
           </Button>

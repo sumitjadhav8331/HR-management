@@ -18,6 +18,9 @@ export type Database = {
           id: string;
           login_time: string;
           logout_time: string | null;
+          latitude: number | null;
+          longitude: number | null;
+          address: string | null;
           total_hours: number | null;
           updated_at: string;
         };
@@ -29,6 +32,9 @@ export type Database = {
           id?: string;
           login_time: string;
           logout_time?: string | null;
+          latitude?: number | null;
+          longitude?: number | null;
+          address?: string | null;
           total_hours?: number | null;
           updated_at?: string;
         };
@@ -40,6 +46,9 @@ export type Database = {
           id?: string;
           login_time?: string;
           logout_time?: string | null;
+          latitude?: number | null;
+          longitude?: number | null;
+          address?: string | null;
           total_hours?: number | null;
           updated_at?: string;
         };
@@ -100,6 +109,10 @@ export type Database = {
           name: string;
           phone: string;
           role: string;
+          salary: number;
+          department: string;
+          profile_photo_url: string | null;
+          user_id: string | null;
           status: "active" | "not_joined" | "left";
           updated_at: string;
         };
@@ -112,6 +125,10 @@ export type Database = {
           name: string;
           phone: string;
           role: string;
+          salary?: number;
+          department?: string;
+          profile_photo_url?: string | null;
+          user_id?: string | null;
           status: "active" | "not_joined" | "left";
           updated_at?: string;
         };
@@ -124,6 +141,10 @@ export type Database = {
           name?: string;
           phone?: string;
           role?: string;
+          salary?: number;
+          department?: string;
+          profile_photo_url?: string | null;
+          user_id?: string | null;
           status?: "active" | "not_joined" | "left";
           updated_at?: string;
         };
@@ -137,6 +158,7 @@ export type Database = {
           employee_id: string;
           id: string;
           reason: string;
+          status: "pending" | "approved" | "rejected";
           updated_at: string;
         };
         Insert: {
@@ -146,6 +168,7 @@ export type Database = {
           employee_id: string;
           id?: string;
           reason: string;
+          status?: "pending" | "approved" | "rejected";
           updated_at?: string;
         };
         Update: {
@@ -155,6 +178,7 @@ export type Database = {
           employee_id?: string;
           id?: string;
           reason?: string;
+          status?: "pending" | "approved" | "rejected";
           updated_at?: string;
         };
         Relationships: [];
@@ -195,6 +219,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      salaries: {
+        Row: {
+          amount: number;
+          bonus: number;
+          created_at: string;
+          created_by: string;
+          deduction: number;
+          employee_id: string;
+          id: string;
+          month: string;
+          notes: string | null;
+          payment_status: "pending" | "paid";
+          updated_at: string;
+        };
+        Insert: {
+          amount: number;
+          bonus?: number;
+          created_at?: string;
+          created_by?: string;
+          deduction?: number;
+          employee_id: string;
+          id?: string;
+          month: string;
+          notes?: string | null;
+          payment_status?: "pending" | "paid";
+          updated_at?: string;
+        };
+        Update: {
+          amount?: number;
+          bonus?: number;
+          created_at?: string;
+          created_by?: string;
+          deduction?: number;
+          employee_id?: string;
+          id?: string;
+          month?: string;
+          notes?: string | null;
+          payment_status?: "pending" | "paid";
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       reports: {
         Row: {
           created_at: string;
@@ -230,8 +296,10 @@ export type Database = {
           completed_at: string | null;
           created_at: string;
           created_by: string;
+          assigned_to: string | null;
           deadline: string | null;
           description: string | null;
+          completion_notes: string | null;
           id: string;
           priority: "low" | "medium" | "high" | "urgent";
           status: "pending" | "completed";
@@ -242,8 +310,10 @@ export type Database = {
           completed_at?: string | null;
           created_at?: string;
           created_by?: string;
+          assigned_to?: string | null;
           deadline?: string | null;
           description?: string | null;
+          completion_notes?: string | null;
           id?: string;
           priority: "low" | "medium" | "high" | "urgent";
           status?: "pending" | "completed";
@@ -254,8 +324,10 @@ export type Database = {
           completed_at?: string | null;
           created_at?: string;
           created_by?: string;
+          assigned_to?: string | null;
           deadline?: string | null;
           description?: string | null;
+          completion_notes?: string | null;
           id?: string;
           priority?: "low" | "medium" | "high" | "urgent";
           status?: "pending" | "completed";
@@ -270,7 +342,7 @@ export type Database = {
           email: string;
           full_name: string | null;
           id: string;
-          role: "hr";
+          role: "hr" | "employee";
           updated_at: string;
         };
         Insert: {
@@ -278,7 +350,7 @@ export type Database = {
           email: string;
           full_name?: string | null;
           id: string;
-          role?: "hr";
+          role?: "hr" | "employee";
           updated_at?: string;
         };
         Update: {
@@ -286,7 +358,7 @@ export type Database = {
           email?: string;
           full_name?: string | null;
           id?: string;
-          role?: "hr";
+          role?: "hr" | "employee";
           updated_at?: string;
         };
         Relationships: [];

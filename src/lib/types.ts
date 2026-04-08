@@ -25,7 +25,10 @@ export type DailyReportSummary = {
   };
   attendance: {
     presentCount: number;
+    absentCount: number;
     employees: string[];
+    absentEmployees: string[];
+    locations: string[];
   };
   tasks: {
     completed: string[];

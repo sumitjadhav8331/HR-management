@@ -19,6 +19,9 @@ export async function saveAttendanceAction(formData: FormData) {
     attendance_date: getString(formData, "attendance_date"),
     login_time: getString(formData, "login_time"),
     logout_time: getString(formData, "logout_time") || undefined,
+    latitude: getString(formData, "latitude") || undefined,
+    longitude: getString(formData, "longitude") || undefined,
+    address: getString(formData, "address") || undefined,
   });
 
   if (!parsed.success) {
@@ -38,6 +41,9 @@ export async function saveAttendanceAction(formData: FormData) {
     login_time: loginTime,
     logout_time: logoutTime,
     total_hours: totalHours,
+    latitude: parsed.data.latitude ?? null,
+    longitude: parsed.data.longitude ?? null,
+    address: parsed.data.address?.trim() || null,
   };
 
   const { error } = id
