@@ -1,9 +1,13 @@
 import { isBefore, startOfToday } from "date-fns";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { PAGE_SIZE } from "@/lib/constants";
+import { sql } from "@/lib/server/postgres";
 import type { Tables } from "@/lib/supabase/database.types";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { buildPagination, dateKey } from "@/lib/utils";
+
+type CountRow = {
+  count: number;
+};
 
 type SearchParamsInput = {
   page?: number;
@@ -30,7 +34,6 @@ export async function getEmployeeDashboardData() {
     };
   }
 
-  const supabase = await createServerSupabaseClient();
   const today = dateKey(new Date());
 
   const [
@@ -42,61 +45,88 @@ export async function getEmployeeDashboardData() {
     recentLeavesResult,
     latestSalaryResult,
   ] = await Promise.all([
-    supabase
-      .from("attendance")
-      .select("*")
-      .eq("employee_id", employee.id)
-      .eq("attendance_date", today)
-      .order("login_time", { ascending: false })
-      .limit(1),
-    supabase
-      .from("tasks")
-      .select("*", { count: "exact", head: true })
-      .eq("assigned_to", employee.id)
-      .eq("status", "pending"),
-    supabase
-      .from("tasks")
-      .select("*", { count: "exact", head: true })
-      .eq("assigned_to", employee.id)
-      .eq("status", "completed"),
-    supabase
-      .from("leaves")
-      .select("*", { count: "exact", head: true })
-      .eq("employee_id", employee.id)
-      .eq("status", "pending"),
-    supabase
-      .from("tasks")
-      .select("*")
-      .eq("assigned_to", employee.id)
-      .order("status", { ascending: true })
-      .order("deadline", { ascending: true })
-      .limit(5),
-    supabase
-      .from("leaves")
-      .select("*")
-      .eq("employee_id", employee.id)
-      .order("date", { ascending: false })
-      .limit(5),
-    supabase
-      .from("salaries")
-      .select("*")
-      .eq("employee_id", employee.id)
-      .order("month", { ascending: false })
-      .limit(1),
+    sql<Tables<"attendance">>(
+      `
+        select *
+        from public.attendance
+        where employee_id = $1
+          and attendance_date = $2
+        order by login_time desc
+        limit 1
+      `,
+      [employee.id, today],
+    ),
+    sql<CountRow>(
+      `
+        select count(*)::int as count
+        from public.tasks
+        where assigned_to = $1
+          and status = 'pending'
+      `,
+      [employee.id],
+    ),
+    sql<CountRow>(
+      `
+        select count(*)::int as count
+        from public.tasks
+        where assigned_to = $1
+          and status = 'completed'
+      `,
+      [employee.id],
+    ),
+    sql<CountRow>(
+      `
+        select count(*)::int as count
+        from public.leaves
+        where employee_id = $1
+          and status = 'pending'
+      `,
+      [employee.id],
+    ),
+    sql<Tables<"tasks">>(
+      `
+        select *
+        from public.tasks
+        where assigned_to = $1
+        order by status asc, deadline asc nulls last
+        limit 5
+      `,
+      [employee.id],
+    ),
+    sql<Tables<"leaves">>(
+      `
+        select *
+        from public.leaves
+        where employee_id = $1
+        order by date desc
+        limit 5
+      `,
+      [employee.id],
+    ),
+    sql<Tables<"salaries">>(
+      `
+        select *
+        from public.salaries
+        where employee_id = $1
+        order by month desc
+        limit 1
+      `,
+      [employee.id],
+    ),
   ]);
 
   return {
     employee,
-    latestSalary: latestSalaryResult.data?.[0] ?? null,
+    latestSalary: latestSalaryResult.rows[0] ?? null,
     metrics: {
-      completedTasks: completedTasksResult.count ?? 0,
-      pendingLeaves: pendingLeavesResult.count ?? 0,
-      pendingTasks: pendingTasksResult.count ?? 0,
+      completedTasks: completedTasksResult.rows[0]?.count ?? 0,
+      pendingLeaves: pendingLeavesResult.rows[0]?.count ?? 0,
+      pendingTasks: pendingTasksResult.rows[0]?.count ?? 0,
     },
     profile,
-    recentLeaves: (recentLeavesResult.data ?? []) as Tables<"leaves">[],
-    tasks: (tasksResult.data ?? []) as Tables<"tasks">[],
-    todayAttendance: (todayAttendanceResult.data ?? [])[0] ?? null,
+    recentLeaves: recentLeavesResult.rows,
+    tasks: tasksResult.rows,
+    todayAttendance: todayAttendanceResult.rows[0] ?? null,
     user,
   };
 }
@@ -114,33 +144,48 @@ export async function getEmployeeAttendancePageData({ page }: SearchParamsInput)
     };
   }
 
-  const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
   const todayDate = dateKey(new Date());
 
-  const [todayResult, recordsResult] = await Promise.all([
-    supabase
-      .from("attendance")
-      .select("*")
-      .eq("employee_id", employee.id)
-      .eq("attendance_date", todayDate)
-      .order("login_time", { ascending: false })
-      .limit(1),
-    supabase
-      .from("attendance")
-      .select("*", { count: "exact" })
-      .eq("employee_id", employee.id)
-      .order("attendance_date", { ascending: false })
-      .order("login_time", { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1),
+  const [todayResult, countResult, recordsResult] = await Promise.all([
+    sql<Tables<"attendance">>(
+      `
+        select *
+        from public.attendance
+        where employee_id = $1
+          and attendance_date = $2
+        order by login_time desc
+        limit 1
+      `,
+      [employee.id, todayDate],
+    ),
+    sql<CountRow>(
+      `
+        select count(*)::int as count
+        from public.attendance
+        where employee_id = $1
+      `,
+      [employee.id],
+    ),
+    sql<Tables<"attendance">>(
+      `
+        select *
+        from public.attendance
+        where employee_id = $1
+        order by attendance_date desc, login_time desc
+        limit $2
+        offset $3
+      `,
+      [employee.id, PAGE_SIZE, offset],
+    ),
   ]);
 
   return {
     employee,
-    pagination: buildPagination(recordsResult.count ?? 0, page ?? 1, PAGE_SIZE),
-    records: (recordsResult.data ?? []) as Tables<"attendance">[],
+    pagination: buildPagination(countResult.rows[0]?.count ?? 0, page ?? 1, PAGE_SIZE),
+    records: recordsResult.rows,
     todayDate,
-    todayRecord: (todayResult.data ?? [])[0] ?? null,
+    todayRecord: todayResult.rows[0] ?? null,
   };
 }
 
@@ -160,39 +205,68 @@ export async function getEmployeeTasksPageData({ page, status }: SearchParamsInp
     };
   }
 
-  const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
-  let builder = supabase
-    .from("tasks")
-    .select("*", { count: "exact" })
-    .eq("assigned_to", employee.id)
-    .order("status", { ascending: true })
-    .order("deadline", { ascending: true });
+  const filters = ["assigned_to = $1"];
+  const values: Array<string | number> = [employee.id];
 
   if (status) {
-    builder = builder.eq("status", status as Tables<"tasks">["status"]);
+    values.push(status);
+    filters.push(`status = $${values.length}`);
   }
 
-  const [listResult, completedResult, pendingResult, allTasksResult] = await Promise.all([
-    builder.range(offset, offset + PAGE_SIZE - 1),
-    supabase
-      .from("tasks")
-      .select("*", { count: "exact", head: true })
-      .eq("assigned_to", employee.id)
-      .eq("status", "completed"),
-    supabase
-      .from("tasks")
-      .select("*", { count: "exact", head: true })
-      .eq("assigned_to", employee.id)
-      .eq("status", "pending"),
-    supabase
-      .from("tasks")
-      .select("deadline, status")
-      .eq("assigned_to", employee.id),
-  ]);
+  const whereClause = filters.join(" and ");
+
+  const [listResult, totalResult, completedResult, pendingResult, allTasksResult] =
+    await Promise.all([
+      sql<Tables<"tasks">>(
+        `
+          select *
+          from public.tasks
+          where ${whereClause}
+          order by status asc, deadline asc nulls last
+          limit $${values.length + 1}
+          offset $${values.length + 2}
+        `,
+        [...values, PAGE_SIZE, offset],
+      ),
+      sql<CountRow>(
+        `
+          select count(*)::int as count
+          from public.tasks
+          where ${whereClause}
+        `,
+        values,
+      ),
+      sql<CountRow>(
+        `
+          select count(*)::int as count
+          from public.tasks
+          where assigned_to = $1
+            and status = 'completed'
+        `,
+        [employee.id],
+      ),
+      sql<CountRow>(
+        `
+          select count(*)::int as count
+          from public.tasks
+          where assigned_to = $1
+            and status = 'pending'
+        `,
+        [employee.id],
+      ),
+      sql<Pick<Tables<"tasks">, "deadline" | "status">>(
+        `
+          select deadline, status
+          from public.tasks
+          where assigned_to = $1
+        `,
+        [employee.id],
+      ),
+    ]);
 
   const today = startOfToday();
-  const overdue = (allTasksResult.data ?? []).filter(
+  const overdue = allTasksResult.rows.filter(
     (task) =>
       task.status !== "completed" &&
       task.deadline &&
@@ -202,12 +276,12 @@ export async function getEmployeeTasksPageData({ page, status }: SearchParamsInp
   return {
     employee,
     metrics: {
-      completed: completedResult.count ?? 0,
+      completed: completedResult.rows[0]?.count ?? 0,
       overdue,
-      pending: pendingResult.count ?? 0,
+      pending: pendingResult.rows[0]?.count ?? 0,
     },
-    pagination: buildPagination(listResult.count ?? 0, page ?? 1, PAGE_SIZE),
-    tasks: (listResult.data ?? []) as Tables<"tasks">[],
+    pagination: buildPagination(totalResult.rows[0]?.count ?? 0, page ?? 1, PAGE_SIZE),
+    tasks: listResult.rows,
   };
 }
 
@@ -227,42 +301,67 @@ export async function getEmployeeLeavesPageData({ page }: SearchParamsInput) {
     };
   }
 
-  const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
 
-  const [listResult, pendingResult, approvedResult, rejectedResult] = await Promise.all([
-    supabase
-      .from("leaves")
-      .select("*", { count: "exact" })
-      .eq("employee_id", employee.id)
-      .order("date", { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1),
-    supabase
-      .from("leaves")
-      .select("*", { count: "exact", head: true })
-      .eq("employee_id", employee.id)
-      .eq("status", "pending"),
-    supabase
-      .from("leaves")
-      .select("*", { count: "exact", head: true })
-      .eq("employee_id", employee.id)
-      .eq("status", "approved"),
-    supabase
-      .from("leaves")
-      .select("*", { count: "exact", head: true })
-      .eq("employee_id", employee.id)
-      .eq("status", "rejected"),
-  ]);
+  const [listResult, totalResult, pendingResult, approvedResult, rejectedResult] =
+    await Promise.all([
+      sql<Tables<"leaves">>(
+        `
+          select *
+          from public.leaves
+          where employee_id = $1
+          order by date desc
+          limit $2
+          offset $3
+        `,
+        [employee.id, PAGE_SIZE, offset],
+      ),
+      sql<CountRow>(
+        `
+          select count(*)::int as count
+          from public.leaves
+          where employee_id = $1
+        `,
+        [employee.id],
+      ),
+      sql<CountRow>(
+        `
+          select count(*)::int as count
+          from public.leaves
+          where employee_id = $1
+            and status = 'pending'
+        `,
+        [employee.id],
+      ),
+      sql<CountRow>(
+        `
+          select count(*)::int as count
+          from public.leaves
+          where employee_id = $1
+            and status = 'approved'
+        `,
+        [employee.id],
+      ),
+      sql<CountRow>(
+        `
+          select count(*)::int as count
+          from public.leaves
+          where employee_id = $1
+            and status = 'rejected'
+        `,
+        [employee.id],
+      ),
+    ]);
 
   return {
     employee,
-    leaves: (listResult.data ?? []) as Tables<"leaves">[],
+    leaves: listResult.rows,
     metrics: {
-      approved: approvedResult.count ?? 0,
-      pending: pendingResult.count ?? 0,
-      rejected: rejectedResult.count ?? 0,
+      approved: approvedResult.rows[0]?.count ?? 0,
+      pending: pendingResult.rows[0]?.count ?? 0,
+      rejected: rejectedResult.rows[0]?.count ?? 0,
     },
-    pagination: buildPagination(listResult.count ?? 0, page ?? 1, PAGE_SIZE),
+    pagination: buildPagination(totalResult.rows[0]?.count ?? 0, page ?? 1, PAGE_SIZE),
   };
 }
 
@@ -277,18 +376,32 @@ export async function getEmployeeSalaryPageData({ page }: SearchParamsInput) {
     };
   }
 
-  const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
-  const listResult = await supabase
-    .from("salaries")
-    .select("*", { count: "exact" })
-    .eq("employee_id", employee.id)
-    .order("month", { ascending: false })
-    .range(offset, offset + PAGE_SIZE - 1);
+  const [countResult, listResult] = await Promise.all([
+    sql<CountRow>(
+      `
+        select count(*)::int as count
+        from public.salaries
+        where employee_id = $1
+      `,
+      [employee.id],
+    ),
+    sql<Tables<"salaries">>(
+      `
+        select *
+        from public.salaries
+        where employee_id = $1
+        order by month desc
+        limit $2
+        offset $3
+      `,
+      [employee.id, PAGE_SIZE, offset],
+    ),
+  ]);
 
   return {
     employee,
-    pagination: buildPagination(listResult.count ?? 0, page ?? 1, PAGE_SIZE),
-    salaries: (listResult.data ?? []) as Tables<"salaries">[],
+    pagination: buildPagination(countResult.rows[0]?.count ?? 0, page ?? 1, PAGE_SIZE),
+    salaries: listResult.rows,
   };
 }

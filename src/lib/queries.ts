@@ -7,6 +7,7 @@ import {
 } from "date-fns";
 import { getUserLabel, requireHrProfile } from "@/lib/auth";
 import { PAGE_SIZE, REPORT_STORAGE_BUCKET } from "@/lib/constants";
+import { listHrEmployees } from "@/lib/hr-scope";
 import type { Tables } from "@/lib/supabase/database.types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { DailyReportSummary } from "@/lib/types";
@@ -53,9 +54,10 @@ export async function getDashboardData(date?: string) {
   const selectedDate = date || dateKey(new Date());
   const trendDays = toDateRangeDays(selectedDate, 7);
   const fromDate = trendDays[0]?.key ?? selectedDate;
+  const { data: employees } = await listHrEmployees(supabase, user.id);
+  const employeeIds = employees.map((employee) => employee.id);
 
   const [
-    employeeCountResult,
     presentTodayResult,
     callsTodayResult,
     tasksCompletedTodayResult,
@@ -67,53 +69,70 @@ export async function getDashboardData(date?: string) {
     followUpCountResult,
     leaveCountResult,
   ] = await Promise.all([
-    supabase.from("employees").select("*", { count: "exact", head: true }),
-    supabase
-      .from("attendance")
-      .select("*", { count: "exact", head: true })
-      .eq("attendance_date", selectedDate),
+    employeeIds.length
+      ? supabase
+          .from("attendance")
+          .select("*", { count: "exact", head: true })
+          .eq("attendance_date", selectedDate)
+          .in("employee_id", employeeIds)
+      : Promise.resolve({ count: 0 }),
     supabase
       .from("candidates")
       .select("*", { count: "exact", head: true })
       .eq("call_date", selectedDate),
-    supabase
-      .from("tasks")
-      .select("*", { count: "exact", head: true })
-      .eq("completed_at", selectedDate)
-      .eq("status", "completed"),
+    employeeIds.length
+      ? supabase
+          .from("tasks")
+          .select("*", { count: "exact", head: true })
+          .eq("completed_at", selectedDate)
+          .eq("status", "completed")
+          .in("assigned_to", employeeIds)
+      : Promise.resolve({ count: 0 }),
     supabase
       .from("candidates")
       .select("call_date")
       .gte("call_date", fromDate)
       .lte("call_date", selectedDate),
-    supabase
-      .from("attendance")
-      .select("attendance_date")
-      .gte("attendance_date", fromDate)
-      .lte("attendance_date", selectedDate),
+    employeeIds.length
+      ? supabase
+          .from("attendance")
+          .select("attendance_date")
+          .gte("attendance_date", fromDate)
+          .lte("attendance_date", selectedDate)
+          .in("employee_id", employeeIds)
+      : Promise.resolve({ data: [] }),
     supabase
       .from("notes")
       .select("*")
       .eq("note_date", selectedDate)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("tasks")
-      .select("*")
-      .order("deadline", { ascending: true })
-      .limit(5),
-    supabase
-      .from("tasks")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "pending"),
+    employeeIds.length
+      ? supabase
+          .from("tasks")
+          .select("*")
+          .in("assigned_to", employeeIds)
+          .order("deadline", { ascending: true })
+          .limit(5)
+      : Promise.resolve({ data: [] }),
+    employeeIds.length
+      ? supabase
+          .from("tasks")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "pending")
+          .in("assigned_to", employeeIds)
+      : Promise.resolve({ count: 0 }),
     supabase
       .from("candidates")
       .select("*", { count: "exact", head: true })
       .eq("call_date", selectedDate)
       .eq("call_status", "follow_up"),
-    supabase
-      .from("leaves")
-      .select("*", { count: "exact", head: true })
-      .eq("date", selectedDate),
+    employeeIds.length
+      ? supabase
+          .from("leaves")
+          .select("*", { count: "exact", head: true })
+          .eq("date", selectedDate)
+          .in("employee_id", employeeIds)
+      : Promise.resolve({ count: 0 }),
   ]);
 
   const callsMap = new Map<string, number>();
@@ -133,9 +152,9 @@ export async function getDashboardData(date?: string) {
     selectedDate,
     hrName: getUserLabel(profile, user.email),
     metrics: {
-      totalEmployees: employeeCountResult.count ?? 0,
+      totalEmployees: employees.length,
       presentToday: presentTodayResult.count ?? 0,
-      absentToday: Math.max((employeeCountResult.count ?? 0) - (presentTodayResult.count ?? 0), 0),
+      absentToday: Math.max(employees.length - (presentTodayResult.count ?? 0), 0),
       callsMadeToday: callsTodayResult.count ?? 0,
       tasksCompleted: tasksCompletedTodayResult.count ?? 0,
     },
@@ -171,14 +190,11 @@ export async function getDashboardData(date?: string) {
 }
 
 export async function getEmployeeOptions() {
-  await requireHrProfile();
+  const { user } = await requireHrProfile();
   const supabase = await createServerSupabaseClient();
-  const { data } = await supabase
-    .from("employees")
-    .select("id, name, role, status")
-    .order("name", { ascending: true });
+  const { data } = await listHrEmployees(supabase, user.id);
 
-  return data ?? [];
+  return data;
 }
 
 export async function getEmployeesPageData({
@@ -187,12 +203,13 @@ export async function getEmployeesPageData({
   status,
   editId,
 }: SearchParamsInput) {
-  await requireHrProfile();
+  const { user } = await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
   let builder = supabase
     .from("employees")
     .select("*", { count: "exact" })
+    .eq("created_by", user.id)
     .order("created_at", { ascending: false });
 
   if (query) {
@@ -208,7 +225,12 @@ export async function getEmployeesPageData({
   const [{ data, count }, editResult] = await Promise.all([
     builder.range(offset, offset + PAGE_SIZE - 1),
     editId
-      ? supabase.from("employees").select("*").eq("id", editId).maybeSingle()
+      ? supabase
+          .from("employees")
+          .select("*")
+          .eq("id", editId)
+          .eq("created_by", user.id)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -224,13 +246,31 @@ export async function getAttendancePageData({
   date,
   editId,
 }: SearchParamsInput) {
-  await requireHrProfile();
+  const { user } = await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const selectedDate = date || dateKey(new Date());
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
+  const { data: employeeOptions } = await listHrEmployees(supabase, user.id);
+  const employeeIds = employeeOptions.map((employee) => employee.id);
+
+  if (employeeIds.length === 0) {
+    return {
+      selectedDate,
+      records: [] as AttendanceWithEmployee[],
+      editingRecord: null as Tables<"attendance"> | null,
+      employees: employeeOptions,
+      pagination: buildPagination(0, page ?? 1, PAGE_SIZE),
+      summary: {
+        presentToday: 0,
+        averageHours: 0,
+      },
+    };
+  }
+
   let builder = supabase
     .from("attendance")
     .select("*, employee:employees(id, name, role)", { count: "exact" })
+    .in("employee_id", employeeIds)
     .order("attendance_date", { ascending: false })
     .order("login_time", { ascending: false });
 
@@ -238,20 +278,26 @@ export async function getAttendancePageData({
     builder = builder.eq("attendance_date", selectedDate);
   }
 
-  const [recordsResult, editResult, employeeOptions, dayHoursResult, presentCountResult] =
+  const [recordsResult, editResult, dayHoursResult, presentCountResult] =
     await Promise.all([
       builder.range(offset, offset + PAGE_SIZE - 1),
       editId
-        ? supabase.from("attendance").select("*").eq("id", editId).maybeSingle()
+        ? supabase
+            .from("attendance")
+            .select("*")
+            .eq("id", editId)
+            .in("employee_id", employeeIds)
+            .maybeSingle()
         : Promise.resolve({ data: null }),
-      getEmployeeOptions(),
       supabase
         .from("attendance")
         .select("total_hours")
+        .in("employee_id", employeeIds)
         .eq("attendance_date", selectedDate),
       supabase
         .from("attendance")
         .select("*", { count: "exact", head: true })
+        .in("employee_id", employeeIds)
         .eq("attendance_date", selectedDate),
     ]);
 
@@ -351,12 +397,30 @@ export async function getTasksPageData({
   status,
   editId,
 }: SearchParamsInput) {
-  await requireHrProfile();
+  const { user } = await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
+  const { data: employees } = await listHrEmployees(supabase, user.id);
+  const employeeIds = employees.map((employee) => employee.id);
+
+  if (employeeIds.length === 0) {
+    return {
+      tasks: [] as TaskWithAssignee[],
+      editingTask: null as Tables<"tasks"> | null,
+      employees,
+      pagination: buildPagination(0, page ?? 1, PAGE_SIZE),
+      metrics: {
+        completed: 0,
+        pending: 0,
+        overdue: 0,
+      },
+    };
+  }
+
   let builder = supabase
     .from("tasks")
     .select("*, assignee:employees(id, name)", { count: "exact" })
+    .in("assigned_to", employeeIds)
     .order("status", { ascending: true })
     .order("deadline", { ascending: true });
 
@@ -364,22 +428,28 @@ export async function getTasksPageData({
     builder = builder.eq("status", status as Tables<"tasks">["status"]);
   }
 
-  const [listResult, editResult, completedResult, pendingResult, allTasksResult, employees] =
+  const [listResult, editResult, completedResult, pendingResult, allTasksResult] =
     await Promise.all([
       builder.range(offset, offset + PAGE_SIZE - 1),
       editId
-        ? supabase.from("tasks").select("*").eq("id", editId).maybeSingle()
+        ? supabase
+            .from("tasks")
+            .select("*")
+            .eq("id", editId)
+            .in("assigned_to", employeeIds)
+            .maybeSingle()
         : Promise.resolve({ data: null }),
       supabase
         .from("tasks")
         .select("*", { count: "exact", head: true })
+        .in("assigned_to", employeeIds)
         .eq("status", "completed"),
       supabase
         .from("tasks")
         .select("*", { count: "exact", head: true })
+        .in("assigned_to", employeeIds)
         .eq("status", "pending"),
-      supabase.from("tasks").select("deadline, status"),
-      getEmployeeOptions(),
+      supabase.from("tasks").select("deadline, status").in("assigned_to", employeeIds),
     ]);
 
   const today = startOfToday();
@@ -404,32 +474,51 @@ export async function getTasksPageData({
 }
 
 export async function getLeavesPageData({ page, date }: SearchParamsInput) {
-  await requireHrProfile();
+  const { user } = await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
+  const { data: employees } = await listHrEmployees(supabase, user.id);
+  const employeeIds = employees.map((employee) => employee.id);
+
+  if (employeeIds.length === 0) {
+    return {
+      leaves: [] as LeaveWithEmployee[],
+      employees,
+      metrics: {
+        approved: 0,
+        pending: 0,
+        rejected: 0,
+      },
+      pagination: buildPagination(0, page ?? 1, PAGE_SIZE),
+    };
+  }
+
   let builder = supabase
     .from("leaves")
     .select("*, employee:employees(id, name, role)", { count: "exact" })
+    .in("employee_id", employeeIds)
     .order("date", { ascending: false });
 
   if (date) {
     builder = builder.eq("date", date);
   }
 
-  const [listResult, employees, pendingCount, approvedCount, rejectedCount] = await Promise.all([
+  const [listResult, pendingCount, approvedCount, rejectedCount] = await Promise.all([
     builder.range(offset, offset + PAGE_SIZE - 1),
-    getEmployeeOptions(),
     supabase
       .from("leaves")
       .select("*", { count: "exact", head: true })
+      .in("employee_id", employeeIds)
       .eq("status", "pending"),
     supabase
       .from("leaves")
       .select("*", { count: "exact", head: true })
+      .in("employee_id", employeeIds)
       .eq("status", "approved"),
     supabase
       .from("leaves")
       .select("*", { count: "exact", head: true })
+      .in("employee_id", employeeIds)
       .eq("status", "rejected"),
   ]);
 
@@ -463,18 +552,24 @@ export async function buildDailyReportSummary(
 ): Promise<DailyReportSummary> {
   const { user, profile } = await requireHrProfile();
   const supabase = await createServerSupabaseClient();
+  const { data: employees } = await listHrEmployees(supabase, user.id);
+  const employeeIds = employees.map((employee) => employee.id);
+  const activeEmployees = employees.filter((employee) => employee.status === "active");
 
-  const [candidatesResult, attendanceResult, tasksResult, notesResult, employeesResult] =
-    await Promise.all([
-      supabase.from("candidates").select("*").eq("call_date", date),
-      supabase
-        .from("attendance")
-        .select("*, employee:employees(name)")
-        .eq("attendance_date", date),
-      supabase.from("tasks").select("*"),
-      supabase.from("notes").select("*").eq("note_date", date),
-      supabase.from("employees").select("name").eq("status", "active"),
-    ]);
+  const [candidatesResult, attendanceResult, tasksResult, notesResult] = await Promise.all([
+    supabase.from("candidates").select("*").eq("call_date", date),
+    employeeIds.length
+      ? supabase
+          .from("attendance")
+          .select("*, employee:employees(name)")
+          .eq("attendance_date", date)
+          .in("employee_id", employeeIds)
+      : Promise.resolve({ data: [] }),
+    employeeIds.length
+      ? supabase.from("tasks").select("*").in("assigned_to", employeeIds)
+      : Promise.resolve({ data: [] }),
+    supabase.from("notes").select("*").eq("note_date", date),
+  ]);
 
   const candidates = candidatesResult.data ?? [];
   const attendance = ((attendanceResult.data ?? []) as (Tables<"attendance"> & {
@@ -482,7 +577,6 @@ export async function buildDailyReportSummary(
   })[]) ?? [];
   const tasks = tasksResult.data ?? [];
   const notes = notesResult.data ?? [];
-  const activeEmployees = employeesResult.data ?? [];
 
   const joined = candidates.filter((candidate) => candidate.final_status === "joined").length;
   const interested = candidates.filter(
@@ -580,20 +674,38 @@ export async function getReportsPageData({ page, date }: SearchParamsInput) {
 }
 
 export async function getSalariesPageData({ page, editId }: SearchParamsInput) {
-  await requireHrProfile();
+  const { user } = await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
+  const { data: employees } = await listHrEmployees(supabase, user.id);
+  const employeeIds = employees.map((employee) => employee.id);
 
-  const [recordsResult, editResult, employees] = await Promise.all([
+  if (employeeIds.length === 0) {
+    return {
+      salaries: [] as (Tables<"salaries"> & {
+        employee: Pick<Tables<"employees">, "id" | "name" | "department"> | null;
+      })[],
+      editingSalary: null as Tables<"salaries"> | null,
+      employees,
+      pagination: buildPagination(0, page ?? 1, PAGE_SIZE),
+    };
+  }
+
+  const [recordsResult, editResult] = await Promise.all([
     supabase
       .from("salaries")
       .select("*, employee:employees(id, name, department)", { count: "exact" })
+      .in("employee_id", employeeIds)
       .order("month", { ascending: false })
       .range(offset, offset + PAGE_SIZE - 1),
     editId
-      ? supabase.from("salaries").select("*").eq("id", editId).maybeSingle()
+      ? supabase
+          .from("salaries")
+          .select("*")
+          .eq("id", editId)
+          .in("employee_id", employeeIds)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
-    getEmployeeOptions(),
   ]);
 
   return {

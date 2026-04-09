@@ -4,13 +4,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { requireProfile } from "@/lib/auth";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { changePasswordAction, updateProfileAction } from "@/app/actions/profile";
 
 export default async function ProfilePage() {
-  const { user, profile } = await requireProfile();
-  const supabase = await createServerSupabaseClient();
-  const { data: employee } = await supabase.from("employees").select("phone").eq("user_id", user.id).maybeSingle();
+  const { user, profile, employee } = await requireProfile();
 
   return (
     <>

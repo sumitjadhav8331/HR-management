@@ -2,12 +2,34 @@
 
 import { revalidatePath } from "next/cache";
 import { errorResult, getActionContext, getOptionalString, successResult } from "@/lib/action-utils";
+import { hashPassword } from "@/lib/server/password";
+import { sql } from "@/lib/server/postgres";
 
 export async function updateProfileAction(formData: FormData) {
-  const { user, supabase } = await getActionContext();
+  const { user, profile, employee, supabase } = await getActionContext();
   const fullName = getOptionalString(formData, "full_name");
   const phone = getOptionalString(formData, "phone");
   const email = getOptionalString(formData, "email");
+
+  if (profile.role === "employee") {
+    if (!employee) {
+      return errorResult("Employee account is not available right now.");
+    }
+
+    await sql(
+      `
+        update public.employees
+        set name = $1,
+            phone = $2,
+            updated_at = timezone('utc', now())
+        where id = $3
+      `,
+      [fullName ?? employee.name, phone ?? employee.phone, employee.id],
+    );
+
+    revalidatePath("/profile");
+    return successResult("Profile updated.");
+  }
 
   const [{ error: userError }, { error: employeeError }] = await Promise.all([
     supabase
@@ -42,11 +64,31 @@ export async function updateProfileAction(formData: FormData) {
 }
 
 export async function changePasswordAction(formData: FormData) {
-  const { supabase } = await getActionContext();
+  const { employee, profile, supabase } = await getActionContext();
   const password = (formData.get("password") as string | null) ?? "";
 
   if (password.length < 6) {
     return errorResult("Password must be at least 6 characters.");
+  }
+
+  if (profile.role === "employee") {
+    if (!employee) {
+      return errorResult("Employee account is not available right now.");
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    await sql(
+      `
+        update public.employees
+        set password_hash = $1,
+            updated_at = timezone('utc', now())
+        where id = $2
+      `,
+      [passwordHash, employee.id],
+    );
+
+    return successResult("Password updated.");
   }
 
   const { error } = await supabase.auth.updateUser({ password });

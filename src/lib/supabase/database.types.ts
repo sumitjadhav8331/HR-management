@@ -107,6 +107,7 @@ export type Database = {
           id: string;
           joining_date: string;
           name: string;
+          password_hash: string | null;
           phone: string;
           role: string;
           salary: number;
@@ -123,6 +124,7 @@ export type Database = {
           id?: string;
           joining_date: string;
           name: string;
+          password_hash?: string | null;
           phone: string;
           role: string;
           salary?: number;
@@ -139,6 +141,7 @@ export type Database = {
           id?: string;
           joining_date?: string;
           name?: string;
+          password_hash?: string | null;
           phone?: string;
           role?: string;
           salary?: number;

@@ -17,7 +17,7 @@ import {
 import { useUiStore } from "@/lib/stores/ui-store";
 import { cn, getInitials } from "@/lib/utils";
 import { SignOutButton } from "@/components/sign-out-button";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import type { Tables } from "@/lib/supabase/database.types";
 
 const hrNavItems = [
@@ -132,6 +132,18 @@ export function Sidebar({
           </div>
           <div className="pt-4">
             <SignOutButton />
+          </div>
+          <div className="pt-3">
+            <Link
+              className={cn(
+                buttonVariants({ size: "sm", variant: "outline" }),
+                "w-full justify-center border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white",
+              )}
+              href={role === "hr" ? "/employee-login" : "/login"}
+              onClick={() => setMobileNavOpen(false)}
+            >
+              {role === "hr" ? "Open employee login" : "Open HR login"}
+            </Link>
           </div>
         </div>
       </aside>

@@ -12,11 +12,14 @@ import {
   toIsoDateTime,
   validationError,
 } from "@/lib/action-utils";
+import { hrOwnsEmployee } from "@/lib/hr-scope";
+import { sql } from "@/lib/server/postgres";
+import type { Tables } from "@/lib/supabase/database.types";
 import { attendanceSchema } from "@/lib/validators";
 
 export async function saveAttendanceAction(formData: FormData) {
   const id = getString(formData, "id");
-  const { employee, profile, supabase } = await getActionContext();
+  const { employee, profile, supabase, user } = await getActionContext();
   const employeeGuard = requireEmployeeLinkAction(employee);
 
   if (profile.role === "employee" && employeeGuard) {
@@ -40,6 +43,52 @@ export async function saveAttendanceAction(formData: FormData) {
     return validationError(parsed.error);
   }
 
+  if (profile.role === "hr") {
+    const ownedEmployeeResult = await hrOwnsEmployee(
+      supabase,
+      user.id,
+      parsed.data.employee_id,
+    );
+
+    if (ownedEmployeeResult.error) {
+      return errorResult(ownedEmployeeResult.error.message);
+    }
+
+    if (!ownedEmployeeResult.data) {
+      return errorResult("Select one of your employees.");
+    }
+
+    if (id) {
+      const existingRecordResult = await supabase
+        .from("attendance")
+        .select("employee_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (existingRecordResult.error) {
+        return errorResult(existingRecordResult.error.message);
+      }
+
+      if (!existingRecordResult.data) {
+        return errorResult("Attendance entry not found.");
+      }
+
+      const existingOwnershipResult = await hrOwnsEmployee(
+        supabase,
+        user.id,
+        existingRecordResult.data.employee_id,
+      );
+
+      if (existingOwnershipResult.error) {
+        return errorResult(existingOwnershipResult.error.message);
+      }
+
+      if (!existingOwnershipResult.data) {
+        return errorResult("Attendance entry not found.");
+      }
+    }
+  }
+
   const loginTime = toIsoDateTime(parsed.data.login_time);
   const logoutTime = parsed.data.logout_time
     ? toIsoDateTime(parsed.data.logout_time)
@@ -57,12 +106,79 @@ export async function saveAttendanceAction(formData: FormData) {
     address: parsed.data.address?.trim() || null,
   };
 
-  const { error } = id
-    ? await supabase.from("attendance").update(payload).eq("id", id)
-    : await supabase.from("attendance").insert(payload);
+  if (profile.role === "employee") {
+    if (!employee) {
+      return errorResult("Employee account is not available right now.");
+    }
 
-  if (error) {
-    return errorResult(error.message);
+    if (id) {
+      const updateResult = await sql<{ id: string }>(
+        `
+          update public.attendance
+          set attendance_date = $1,
+              login_time = $2,
+              logout_time = $3,
+              total_hours = $4,
+              latitude = $5,
+              longitude = $6,
+              address = $7
+          where id = $8
+            and employee_id = $9
+          returning id
+        `,
+        [
+          payload.attendance_date,
+          payload.login_time,
+          payload.logout_time,
+          payload.total_hours,
+          payload.latitude,
+          payload.longitude,
+          payload.address,
+          id,
+          employee.id,
+        ],
+      );
+
+      if (!updateResult.rows[0]) {
+        return errorResult("Attendance entry not found.");
+      }
+    } else {
+      await sql(
+        `
+          insert into public.attendance (
+            created_by,
+            employee_id,
+            attendance_date,
+            login_time,
+            logout_time,
+            total_hours,
+            latitude,
+            longitude,
+            address
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `,
+        [
+          employee.created_by,
+          employee.id,
+          payload.attendance_date,
+          payload.login_time,
+          payload.logout_time,
+          payload.total_hours,
+          payload.latitude,
+          payload.longitude,
+          payload.address,
+        ],
+      );
+    }
+  } else {
+    const { error } = id
+      ? await supabase.from("attendance").update(payload).eq("id", id)
+      : await supabase.from("attendance").insert(payload);
+
+    if (error) {
+      return errorResult(error.message);
+    }
   }
 
   revalidatePath("/attendance");
@@ -73,11 +189,39 @@ export async function saveAttendanceAction(formData: FormData) {
 }
 
 export async function deleteAttendanceAction(id: string) {
-  const { profile, supabase } = await getActionContext();
+  const { profile, supabase, user } = await getActionContext();
   const hrGuard = requireHrAction(profile);
 
   if (hrGuard) {
     return hrGuard;
+  }
+
+  const existingRecordResult = await supabase
+    .from("attendance")
+    .select("employee_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (existingRecordResult.error) {
+    return errorResult(existingRecordResult.error.message);
+  }
+
+  if (!existingRecordResult.data) {
+    return errorResult("Attendance entry not found.");
+  }
+
+  const ownershipResult = await hrOwnsEmployee(
+    supabase,
+    user.id,
+    existingRecordResult.data.employee_id,
+  );
+
+  if (ownershipResult.error) {
+    return errorResult(ownershipResult.error.message);
+  }
+
+  if (!ownershipResult.data) {
+    return errorResult("Attendance entry not found.");
   }
 
   const { error } = await supabase.from("attendance").delete().eq("id", id);
@@ -94,7 +238,7 @@ export async function deleteAttendanceAction(id: string) {
 }
 
 export async function employeeCheckInAction(formData: FormData) {
-  const { employee, profile, supabase } = await getActionContext();
+  const { employee, profile } = await getActionContext();
   const employeeGuard = requireEmployeeLinkAction(employee);
 
   if (profile.role !== "employee") {
@@ -118,37 +262,48 @@ export async function employeeCheckInAction(formData: FormData) {
     return errorResult("Attendance date is required.");
   }
 
-  const existingResult = await supabase
-    .from("attendance")
-    .select("id")
-    .eq("employee_id", employeeRecord.id)
-    .eq("attendance_date", attendanceDate)
-    .is("logout_time", null)
-    .maybeSingle();
+  const existingResult = await sql<{ id: string }>(
+    `
+      select id
+      from public.attendance
+      where employee_id = $1
+        and attendance_date = $2
+        and logout_time is null
+      limit 1
+    `,
+    [employeeRecord.id, attendanceDate],
+  );
 
-  if (existingResult.error) {
-    return errorResult(existingResult.error.message);
-  }
-
-  if (existingResult.data) {
+  if (existingResult.rows[0]) {
     return errorResult("You already checked in today. Please check out first.");
   }
 
   const now = new Date().toISOString();
-  const { error } = await supabase.from("attendance").insert({
-    address: address || null,
-    attendance_date: attendanceDate,
-    employee_id: employeeRecord.id,
-    latitude: latitude ? Number(latitude) : null,
-    login_time: now,
-    longitude: longitude ? Number(longitude) : null,
-    logout_time: null,
-    total_hours: null,
-  });
-
-  if (error) {
-    return errorResult(error.message);
-  }
+  await sql(
+    `
+      insert into public.attendance (
+        created_by,
+        employee_id,
+        attendance_date,
+        login_time,
+        latitude,
+        longitude,
+        address,
+        logout_time,
+        total_hours
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, null, null)
+    `,
+    [
+      employeeRecord.created_by,
+      employeeRecord.id,
+      attendanceDate,
+      now,
+      latitude ? Number(latitude) : null,
+      longitude ? Number(longitude) : null,
+      address || null,
+    ],
+  );
 
   revalidatePath("/attendance");
   revalidatePath("/dashboard");
@@ -157,7 +312,7 @@ export async function employeeCheckInAction(formData: FormData) {
 }
 
 export async function employeeCheckOutAction(formData: FormData) {
-  const { employee, profile, supabase } = await getActionContext();
+  const { employee, profile } = await getActionContext();
   const employeeGuard = requireEmployeeLinkAction(employee);
 
   if (profile.role !== "employee") {
@@ -178,38 +333,36 @@ export async function employeeCheckOutAction(formData: FormData) {
     return errorResult("Attendance date is required.");
   }
 
-  const openResult = await supabase
-    .from("attendance")
-    .select("*")
-    .eq("employee_id", employeeRecord.id)
-    .eq("attendance_date", attendanceDate)
-    .is("logout_time", null)
-    .order("login_time", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const openResult = await sql<Tables<"attendance">>(
+    `
+      select *
+      from public.attendance
+      where employee_id = $1
+        and attendance_date = $2
+        and logout_time is null
+      order by login_time desc
+      limit 1
+    `,
+    [employeeRecord.id, attendanceDate],
+  );
 
-  if (openResult.error) {
-    return errorResult(openResult.error.message);
-  }
-
-  if (!openResult.data) {
+  if (!openResult.rows[0]) {
     return errorResult("No active check in found for today.");
   }
 
   const logoutTime = new Date().toISOString();
-  const totalHours = calculateTotalHours(openResult.data.login_time, logoutTime);
+  const totalHours = calculateTotalHours(openResult.rows[0].login_time, logoutTime);
 
-  const { error } = await supabase
-    .from("attendance")
-    .update({
-      logout_time: logoutTime,
-      total_hours: totalHours,
-    })
-    .eq("id", openResult.data.id);
-
-  if (error) {
-    return errorResult(error.message);
-  }
+  await sql(
+    `
+      update public.attendance
+      set logout_time = $1,
+          total_hours = $2
+      where id = $3
+        and employee_id = $4
+    `,
+    [logoutTime, totalHours, openResult.rows[0].id, employeeRecord.id],
+  );
 
   revalidatePath("/attendance");
   revalidatePath("/dashboard");

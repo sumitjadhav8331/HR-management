@@ -9,11 +9,12 @@ import {
   successResult,
   validationError,
 } from "@/lib/action-utils";
+import { hrOwnsEmployee } from "@/lib/hr-scope";
 import { salarySchema } from "@/lib/validators";
 
 export async function saveSalaryAction(formData: FormData) {
   const id = getString(formData, "id");
-  const { profile, supabase } = await getActionContext();
+  const { profile, supabase, user } = await getActionContext();
   const hrGuard = requireHrAction(profile);
 
   if (hrGuard) {
@@ -32,6 +33,50 @@ export async function saveSalaryAction(formData: FormData) {
 
   if (!parsed.success) {
     return validationError(parsed.error);
+  }
+
+  const ownedEmployeeResult = await hrOwnsEmployee(
+    supabase,
+    user.id,
+    parsed.data.employee_id,
+  );
+
+  if (ownedEmployeeResult.error) {
+    return errorResult(ownedEmployeeResult.error.message);
+  }
+
+  if (!ownedEmployeeResult.data) {
+    return errorResult("Select one of your employees.");
+  }
+
+  if (id) {
+    const existingSalaryResult = await supabase
+      .from("salaries")
+      .select("employee_id")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (existingSalaryResult.error) {
+      return errorResult(existingSalaryResult.error.message);
+    }
+
+    if (!existingSalaryResult.data) {
+      return errorResult("Salary record not found.");
+    }
+
+    const existingOwnershipResult = await hrOwnsEmployee(
+      supabase,
+      user.id,
+      existingSalaryResult.data.employee_id,
+    );
+
+    if (existingOwnershipResult.error) {
+      return errorResult(existingOwnershipResult.error.message);
+    }
+
+    if (!existingOwnershipResult.data) {
+      return errorResult("Salary record not found.");
+    }
   }
 
   const payload = {
@@ -58,11 +103,39 @@ export async function saveSalaryAction(formData: FormData) {
 }
 
 export async function deleteSalaryAction(id: string) {
-  const { profile, supabase } = await getActionContext();
+  const { profile, supabase, user } = await getActionContext();
   const hrGuard = requireHrAction(profile);
 
   if (hrGuard) {
     return hrGuard;
+  }
+
+  const existingSalaryResult = await supabase
+    .from("salaries")
+    .select("employee_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (existingSalaryResult.error) {
+    return errorResult(existingSalaryResult.error.message);
+  }
+
+  if (!existingSalaryResult.data) {
+    return errorResult("Salary record not found.");
+  }
+
+  const ownershipResult = await hrOwnsEmployee(
+    supabase,
+    user.id,
+    existingSalaryResult.data.employee_id,
+  );
+
+  if (ownershipResult.error) {
+    return errorResult(ownershipResult.error.message);
+  }
+
+  if (!ownershipResult.data) {
+    return errorResult("Salary record not found.");
   }
 
   const { error } = await supabase.from("salaries").delete().eq("id", id);

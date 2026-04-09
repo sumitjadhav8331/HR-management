@@ -102,7 +102,9 @@ export default async function EmployeesPage({
                         <TableCell>{Number(employee.salary ?? 0).toFixed(2)}</TableCell>
                         <TableCell>{employee.phone}</TableCell>
                         <TableCell>{formatDate(employee.joining_date)}</TableCell>
-                        <TableCell>{employee.user_id ? "Login linked" : "No login yet"}</TableCell>
+                        <TableCell>
+                          {employee.email && employee.password_hash ? "Ready" : "Needs setup"}
+                        </TableCell>
                         <TableCell>
                           <StatusBadge value={employee.status} />
                         </TableCell>

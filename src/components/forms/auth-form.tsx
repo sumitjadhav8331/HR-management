@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -18,7 +19,6 @@ export function AuthForm({ supabaseConfigured }: { supabaseConfigured: boolean }
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [mode, setMode] = useState<"login" | "signup">("login");
-  const [loginRole, setLoginRole] = useState<"hr" | "employee">("hr");
   const [pending, startTransition] = useTransition();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -78,84 +78,43 @@ export function AuthForm({ supabaseConfigured }: { supabaseConfigured: boolean }
       <CardHeader className="space-y-3">
         <p className="eyebrow">Secure access</p>
         <CardTitle className="text-3xl">
-          {mode === "login"
-            ? loginRole === "employee"
-              ? "Employee login"
-              : "Sign in to HR workspace"
-            : "Create the HR account"}
+          {mode === "login" ? "Sign in to HR workspace" : "Create the HR account"}
         </CardTitle>
         <p className="text-sm leading-7 text-muted-foreground">
           {mode === "login"
-            ? loginRole === "employee"
-              ? "Employees can sign in with credentials provided by HR and access attendance, tasks, and leave flow."
-              : "Use Supabase email/password authentication with persistent protected sessions."
+            ? "Use Supabase email/password authentication for HR access. Employees use their separate employee login screen."
             : "Create an HR account to manage employees, attendance, and reports."}
         </p>
         <div className="inline-flex rounded-full bg-secondary p-1">
           <button
             className={cn(
-              buttonVariants({
-                variant: mode === "login" && loginRole === "hr" ? "default" : "ghost",
-                size: "sm",
-              }),
+              buttonVariants({ variant: mode === "login" ? "default" : "ghost", size: "sm" }),
               "rounded-full",
             )}
             disabled={!supabaseConfigured}
-            onClick={() => {
-              setMode("login");
-              setLoginRole("hr");
-            }}
+            onClick={() => setMode("login")}
             type="button"
           >
             HR login
           </button>
           <button
             className={cn(
-              buttonVariants({
-                variant: mode === "login" && loginRole === "employee" ? "default" : "ghost",
-                size: "sm",
-              }),
+              buttonVariants({ variant: mode === "signup" ? "default" : "ghost", size: "sm" }),
               "rounded-full",
             )}
             disabled={!supabaseConfigured}
-            onClick={() => {
-              setMode("login");
-              setLoginRole("employee");
-            }}
+            onClick={() => setMode("signup")}
             type="button"
           >
-            Employee login
+            Create account
           </button>
         </div>
-        {loginRole === "hr" ? (
-          <div className="inline-flex rounded-full bg-secondary p-1">
-            <button
-              className={cn(
-                buttonVariants({ variant: mode === "login" ? "default" : "ghost", size: "sm" }),
-                "rounded-full",
-              )}
-              disabled={!supabaseConfigured}
-              onClick={() => {
-                setMode("login");
-                setLoginRole("hr");
-              }}
-              type="button"
-            >
-              Admin login
-            </button>
-            <button
-              className={cn(
-                buttonVariants({ variant: mode === "signup" ? "default" : "ghost", size: "sm" }),
-                "rounded-full",
-              )}
-              disabled={!supabaseConfigured}
-              onClick={() => setMode("signup")}
-              type="button"
-            >
-              Create account
-            </button>
-          </div>
-        ) : null}
+        <Link
+          className={cn(buttonVariants({ size: "sm", variant: "outline" }), "w-fit rounded-full")}
+          href="/employee-login"
+        >
+          Employee login
+        </Link>
         {!supabaseConfigured ? (
           <div className="rounded-2xl border border-amber-300/50 bg-amber-100/70 px-4 py-3 text-sm leading-6 text-amber-950">
             Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to `.env.local`,
@@ -183,7 +142,7 @@ export function AuthForm({ supabaseConfigured }: { supabaseConfigured: boolean }
               id="email"
               name="email"
               type="email"
-              placeholder={loginRole === "employee" ? "employee@company.com" : "hr@company.com"}
+              placeholder="hr@company.com"
               required
             />
           </div>

@@ -10,14 +10,15 @@ import {
   successResult,
   validationError,
 } from "@/lib/action-utils";
-import { createStatelessSupabaseClient } from "@/lib/supabase/stateless";
+import { hashPassword } from "@/lib/server/password";
+import { sql } from "@/lib/server/postgres";
 import { employeeSchema } from "@/lib/validators";
 
 function isMissingEmployeeColumnError(message: string) {
   return (
     message.includes("Could not find the 'department' column") ||
     message.includes("Could not find the 'salary' column") ||
-    message.includes("Could not find the 'user_id' column")
+    message.includes("Could not find the 'password_hash' column")
   );
 }
 
@@ -39,7 +40,7 @@ export async function saveEmployeeAction(formData: FormData) {
     return validationError(parsed.error);
   }
 
-  const { profile, supabase } = await getActionContext();
+  const { profile, supabase, user } = await getActionContext();
   const hrGuard = requireHrAction(profile);
 
   if (hrGuard) {
@@ -47,59 +48,46 @@ export async function saveEmployeeAction(formData: FormData) {
   }
 
   const existingEmployeeResult = id
-    ? await supabase.from("employees").select("*").eq("id", id).maybeSingle()
+    ? await supabase
+        .from("employees")
+        .select("*")
+        .eq("id", id)
+        .eq("created_by", user.id)
+        .maybeSingle()
     : { data: null, error: null };
 
   if (existingEmployeeResult.error) {
     return errorResult(existingEmployeeResult.error.message);
   }
 
-  let linkedUserId = existingEmployeeResult.data?.user_id ?? null;
-  let loginWarning: string | null = null;
+  if (id && !existingEmployeeResult.data) {
+    return errorResult("Employee not found.");
+  }
 
-  if (!linkedUserId && parsed.data.email && parsed.data.password) {
-    const authClient = createStatelessSupabaseClient();
-    const authResult = await authClient.auth.signUp({
-      email: parsed.data.email,
-      password: parsed.data.password,
-      options: {
-        data: {
-          full_name: parsed.data.name,
-          role: "employee",
-        },
-      },
-    });
+  const normalizedEmail = getOptionalString(formData, "email")?.toLowerCase() ?? null;
 
-    if (authResult.error) {
-      const authMessage = authResult.error.message.toLowerCase();
+  if (normalizedEmail) {
+    const duplicateEmailResult = await sql<{ id: string }>(
+      `
+        select id
+        from public.employees
+        where lower(email) = lower($1)
+          and ($2::uuid is null or id <> $2::uuid)
+        limit 1
+      `,
+      [normalizedEmail, id || null],
+    );
 
-      if (authMessage.includes("rate limit")) {
-        loginWarning =
-          "Employee saved, but login account was not created because Supabase email rate limit was exceeded. Retry account linking in a few minutes.";
-      } else if (authMessage.includes("already registered")) {
-        const existingUserByEmail = await supabase
-          .from("users")
-          .select("id")
-          .eq("email", parsed.data.email)
-          .maybeSingle();
-
-        if (existingUserByEmail.error) {
-          return errorResult(existingUserByEmail.error.message);
-        }
-
-        linkedUserId = existingUserByEmail.data?.id ?? null;
-
-        if (!linkedUserId) {
-          loginWarning =
-            "Employee saved, but this email is already registered and could not be auto-linked.";
-        }
-      } else {
-        return errorResult(authResult.error.message);
-      }
-    } else {
-      linkedUserId = authResult.data.user?.id ?? null;
+    if (duplicateEmailResult.rows[0]) {
+      return errorResult("Another employee already uses this email. Use a different employee email.");
     }
   }
+
+  const passwordHash = parsed.data.password
+    ? await hashPassword(parsed.data.password)
+    : normalizedEmail
+      ? existingEmployeeResult.data?.password_hash ?? null
+      : null;
 
   const payload = {
     name: parsed.data.name,
@@ -109,12 +97,16 @@ export async function saveEmployeeAction(formData: FormData) {
     salary: parsed.data.salary,
     joining_date: parsed.data.joining_date,
     status: parsed.data.status,
-    email: getOptionalString(formData, "email"),
-    user_id: linkedUserId,
+    email: normalizedEmail,
+    password_hash: passwordHash,
   };
 
   let { error } = id
-    ? await supabase.from("employees").update(payload).eq("id", id)
+    ? await supabase
+        .from("employees")
+        .update(payload)
+        .eq("id", id)
+        .eq("created_by", user.id)
     : await supabase.from("employees").insert(payload);
 
   let schemaWarning: string | null = null;
@@ -126,18 +118,22 @@ export async function saveEmployeeAction(formData: FormData) {
       role: parsed.data.role,
       joining_date: parsed.data.joining_date,
       status: parsed.data.status,
-      email: getOptionalString(formData, "email"),
+      email: normalizedEmail,
     };
 
     const retryResult = id
-      ? await supabase.from("employees").update(legacyPayload).eq("id", id)
+      ? await supabase
+          .from("employees")
+          .update(legacyPayload)
+          .eq("id", id)
+          .eq("created_by", user.id)
       : await supabase.from("employees").insert(legacyPayload);
 
     error = retryResult.error;
 
     if (!error) {
       schemaWarning =
-        "Employee saved with legacy columns. Apply latest Supabase migrations to enable department, salary, and login linking.";
+        "Employee saved with legacy columns. Apply latest Supabase migrations to enable department, salary, and employee login passwords.";
     }
   }
 
@@ -154,26 +150,47 @@ export async function saveEmployeeAction(formData: FormData) {
 
   return successResult(
     id
-      ? "Employee updated."
+      ? parsed.data.password
+        ? "Employee updated and password reset."
+        : "Employee updated."
       : schemaWarning
         ? schemaWarning
-      : loginWarning
-        ? loginWarning
-        : linkedUserId
-          ? "Employee added and login account created."
+      : normalizedEmail && passwordHash
+          ? "Employee added. Employee login is ready."
+        : normalizedEmail
+          ? "Employee added. Set a password later to enable employee login."
           : "Employee added.",
   );
 }
 
 export async function deleteEmployeeAction(id: string) {
-  const { profile, supabase } = await getActionContext();
+  const { profile, supabase, user } = await getActionContext();
   const hrGuard = requireHrAction(profile);
 
   if (hrGuard) {
     return hrGuard;
   }
 
-  const { error } = await supabase.from("employees").delete().eq("id", id);
+  const existingEmployeeResult = await supabase
+    .from("employees")
+    .select("id")
+    .eq("id", id)
+    .eq("created_by", user.id)
+    .maybeSingle();
+
+  if (existingEmployeeResult.error) {
+    return errorResult(existingEmployeeResult.error.message);
+  }
+
+  if (!existingEmployeeResult.data) {
+    return errorResult("Employee not found.");
+  }
+
+  const { error } = await supabase
+    .from("employees")
+    .delete()
+    .eq("id", id)
+    .eq("created_by", user.id);
 
   if (error) {
     return errorResult(error.message);

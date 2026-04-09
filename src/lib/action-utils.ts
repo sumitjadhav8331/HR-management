@@ -47,7 +47,7 @@ export function requireEmployeeLinkAction(employee: Tables<"employees"> | null) 
   return employee
     ? null
     : errorResult(
-        "Your login is not linked to an employee profile yet. Ask HR to finish your account setup.",
+        "Your employee account is not available right now. Please sign in again or ask HR to check your setup.",
       );
 }
 

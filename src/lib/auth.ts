@@ -2,10 +2,49 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getReadableName } from "@/lib/utils";
+import {
+  buildEmployeeProfile,
+  getEmployeeAccountById,
+} from "@/lib/server/employee-auth";
+import { getEmployeeSession } from "@/lib/server/employee-session";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Tables } from "@/lib/supabase/database.types";
 
-export async function getCurrentUser() {
+export type AppUser = {
+  email: string | null;
+  id: string;
+};
+
+type AppSessionContext = {
+  employee: Tables<"employees"> | null;
+  profile: Tables<"users">;
+  user: AppUser;
+};
+
+async function getEmployeeSessionContext(): Promise<AppSessionContext | null> {
+  const employeeSession = await getEmployeeSession();
+
+  if (!employeeSession) {
+    return null;
+  }
+
+  const employee = await getEmployeeAccountById(employeeSession.employeeId);
+
+  if (!employee) {
+    return null;
+  }
+
+  return {
+    employee,
+    profile: buildEmployeeProfile(employee),
+    user: {
+      email: employee.email,
+      id: employee.id,
+    },
+  };
+}
+
+async function getHrSessionContext(): Promise<AppSessionContext | null> {
   if (!isSupabaseConfigured()) {
     return null;
   }
@@ -15,17 +54,54 @@ export async function getCurrentUser() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  return user;
+  if (!user) {
+    return null;
+  }
+
+  const profile = await ensureUserRecord(user);
+
+  if (!profile) {
+    return null;
+  }
+
+  const { data: employee } = await supabase
+    .from("employees")
+    .select("*")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  return {
+    employee: employee ?? null,
+    profile,
+    user: {
+      email: user.email ?? null,
+      id: user.id,
+    },
+  };
+}
+
+export async function getCurrentSession() {
+  const employeeContext = await getEmployeeSessionContext();
+
+  if (employeeContext) {
+    return employeeContext;
+  }
+
+  return getHrSessionContext();
+}
+
+export async function getCurrentUser() {
+  return (await getCurrentSession())?.user ?? null;
 }
 
 export async function requireUser() {
-  const user = await getCurrentUser();
+  const context = await getCurrentSession();
 
-  if (!user) {
+  if (!context) {
     redirect("/login");
   }
 
-  return user;
+  return context.user;
 }
 
 export async function ensureUserRecord(user: User) {
@@ -61,25 +137,17 @@ export async function ensureUserRecord(user: User) {
 }
 
 export async function requireProfile(): Promise<{
-  user: User;
+  user: AppUser;
   profile: Tables<"users">;
   employee: Tables<"employees"> | null;
 }> {
-  const user = await requireUser();
-  const profile = await ensureUserRecord(user);
-  const supabase = await createServerSupabaseClient();
+  const context = await getCurrentSession();
 
-  if (!profile) {
+  if (!context) {
     redirect("/login");
   }
 
-  const { data: employee } = await supabase
-    .from("employees")
-    .select("*")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  return { user, profile, employee: employee ?? null };
+  return context;
 }
 
 export async function requireHrProfile() {
@@ -111,7 +179,7 @@ export function isEmployeeRole(profile?: Pick<Tables<"users">, "role"> | null) {
 }
 
 export function getMissingEmployeeLinkMessage() {
-  return "Your login is not linked to an employee profile yet. Ask HR to finish your account setup.";
+  return "Your employee account is not available right now. Ask HR to check your login setup.";
 }
 
 export function getUserLabel(profile: Tables<"users"> | null, email?: string | null) {

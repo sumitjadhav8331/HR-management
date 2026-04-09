@@ -20,6 +20,7 @@ export function EmployeeForm({
   initialData?: Tables<"employees"> | null;
 }) {
   const router = useRouter();
+  const hasEmployeeLogin = Boolean(initialData?.email && initialData?.password_hash);
   const [showPassword, setShowPassword] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -141,40 +142,49 @@ export function EmployeeForm({
               </Select>
             </div>
           </div>
-          {initialData?.user_id ? (
-            <div className="rounded-2xl border border-emerald-300/60 bg-emerald-100/70 px-4 py-3 text-sm leading-6 text-emerald-950">
-              Login account linked. This employee can sign in with the assigned work email.
+          <div className="space-y-2 rounded-2xl border border-border/70 bg-secondary/40 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="employee-password">
+                {initialData ? "Reset employee login password" : "Initial employee login password"}
+              </Label>
+              {hasEmployeeLogin ? (
+                <span className="text-xs font-medium text-emerald-700">
+                  Login ready
+                </span>
+              ) : null}
             </div>
-          ) : (
-            <div className="space-y-2 rounded-2xl border border-border/70 bg-secondary/40 p-4">
-              <Label htmlFor="employee-password">Initial login password</Label>
-              <div className="relative">
-                <Input
-                  id="employee-password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  minLength={6}
-                  placeholder="Create a password for the employee"
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
-                  onClick={() => setShowPassword((value) => !value)}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-              <p className="text-xs leading-6 text-muted-foreground">
-                Add an email and password to create a login account for this employee.
-              </p>
+            <div className="relative">
+              <Input
+                id="employee-password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                minLength={6}
+                placeholder={
+                  initialData
+                    ? "Leave blank to keep the current password"
+                    : "Create a password for the employee"
+                }
+                className="pr-10"
+              />
+              <button
+                type="button"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
             </div>
-          )}
+            <p className="text-xs leading-6 text-muted-foreground">
+              {initialData
+                ? "Keep the email filled in. Add a new password only when you want to reset employee login."
+                : "Add an email and password to enable employee login."}
+            </p>
+          </div>
           <div className="flex flex-wrap gap-3">
             <Button disabled={pending} type="submit">
               {pending ? "Saving..." : initialData ? "Update employee" : "Add employee"}
