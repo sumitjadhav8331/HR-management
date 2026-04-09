@@ -62,12 +62,56 @@ export async function ensureUserRecord(user: User) {
 
 export async function requireProfile(): Promise<{
   user: User;
-  profile: Tables<"users"> | null;
+  profile: Tables<"users">;
+  employee: Tables<"employees"> | null;
 }> {
   const user = await requireUser();
   const profile = await ensureUserRecord(user);
+  const supabase = await createServerSupabaseClient();
 
-  return { user, profile };
+  if (!profile) {
+    redirect("/login");
+  }
+
+  const { data: employee } = await supabase
+    .from("employees")
+    .select("*")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  return { user, profile, employee: employee ?? null };
+}
+
+export async function requireHrProfile() {
+  const context = await requireProfile();
+
+  if (context.profile.role !== "hr") {
+    redirect("/dashboard");
+  }
+
+  return context;
+}
+
+export async function requireEmployeeProfile() {
+  const context = await requireProfile();
+
+  if (context.profile.role !== "employee") {
+    redirect("/dashboard");
+  }
+
+  return context;
+}
+
+export function isHrRole(profile?: Pick<Tables<"users">, "role"> | null) {
+  return profile?.role === "hr";
+}
+
+export function isEmployeeRole(profile?: Pick<Tables<"users">, "role"> | null) {
+  return profile?.role === "employee";
+}
+
+export function getMissingEmployeeLinkMessage() {
+  return "Your login is not linked to an employee profile yet. Ask HR to finish your account setup.";
 }
 
 export function getUserLabel(profile: Tables<"users"> | null, email?: string | null) {

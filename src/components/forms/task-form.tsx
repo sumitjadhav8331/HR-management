@@ -14,8 +14,10 @@ import type { Tables } from "@/lib/supabase/database.types";
 
 export function TaskForm({
   initialData,
+  employees,
 }: {
   initialData?: Tables<"tasks"> | null;
+  employees: Array<Pick<Tables<"employees">, "id" | "name">>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -67,6 +69,22 @@ export function TaskForm({
               placeholder="Mention any dependencies or manager context."
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="task-assigned-to">Assign to</Label>
+            <Select
+              id="task-assigned-to"
+              name="assigned_to"
+              defaultValue={initialData?.assigned_to ?? ""}
+              required
+            >
+              <option value="">Select employee</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}
+                </option>
+              ))}
+            </Select>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="task-priority">Priority</Label>
@@ -100,6 +118,15 @@ export function TaskForm({
               name="deadline"
               type="date"
               defaultValue={initialData?.deadline ?? ""}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="task-completion-notes">Completion notes</Label>
+            <Textarea
+              id="task-completion-notes"
+              name="completion_notes"
+              defaultValue={initialData?.completion_notes ?? ""}
+              placeholder="Optional notes for completion context"
             />
           </div>
           <Button disabled={pending} type="submit">

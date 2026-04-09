@@ -5,6 +5,7 @@ import {
   errorResult,
   getActionContext,
   getOptionalString,
+  requireHrAction,
   getString,
   successResult,
   validationError,
@@ -13,6 +14,13 @@ import { candidateSchema } from "@/lib/validators";
 
 export async function saveCandidateAction(formData: FormData) {
   const id = getString(formData, "id");
+  const { profile, supabase } = await getActionContext();
+  const hrGuard = requireHrAction(profile);
+
+  if (hrGuard) {
+    return hrGuard;
+  }
+
   const parsed = candidateSchema.safeParse({
     name: getString(formData, "name"),
     phone: getString(formData, "phone"),
@@ -29,7 +37,6 @@ export async function saveCandidateAction(formData: FormData) {
     return validationError(parsed.error);
   }
 
-  const { supabase } = await getActionContext();
   const payload = {
     ...parsed.data,
     response: getOptionalString(formData, "response"),
@@ -52,7 +59,13 @@ export async function saveCandidateAction(formData: FormData) {
 }
 
 export async function deleteCandidateAction(id: string) {
-  const { supabase } = await getActionContext();
+  const { profile, supabase } = await getActionContext();
+  const hrGuard = requireHrAction(profile);
+
+  if (hrGuard) {
+    return hrGuard;
+  }
+
   const { error } = await supabase.from("candidates").delete().eq("id", id);
 
   if (error) {

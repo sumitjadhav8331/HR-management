@@ -8,6 +8,7 @@ import {
   errorResult,
   getActionContext,
   getOptionalString,
+  requireHrAction,
   getString,
   successResult,
   validationError,
@@ -15,6 +16,13 @@ import {
 import { reportSchema } from "@/lib/validators";
 
 export async function generateDailyReportAction(formData: FormData) {
+  const { profile, user, supabase } = await getActionContext();
+  const hrGuard = requireHrAction(profile);
+
+  if (hrGuard) {
+    return hrGuard;
+  }
+
   const parsed = reportSchema.safeParse({
     date: getString(formData, "date"),
     overall_notes: getString(formData, "overall_notes") || undefined,
@@ -24,7 +32,6 @@ export async function generateDailyReportAction(formData: FormData) {
     return validationError(parsed.error);
   }
 
-  const { user, supabase } = await getActionContext();
   const summary = await buildDailyReportSummary(
     parsed.data.date,
     getOptionalString(formData, "overall_notes") ?? "",

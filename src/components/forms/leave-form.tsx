@@ -15,7 +15,7 @@ import type { Tables } from "@/lib/supabase/database.types";
 export function LeaveForm({
   employees,
 }: {
-  employees: Array<Pick<Tables<"employees">, "id" | "name" | "role" | "status">>;
+  employees?: Array<Pick<Tables<"employees">, "id" | "name" | "role" | "status">>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -42,21 +42,23 @@ export function LeaveForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Add leave entry</CardTitle>
+        <CardTitle>{employees ? "Add leave entry" : "Apply for leave"}</CardTitle>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={onSubmit}>
-          <div className="space-y-2">
-            <Label htmlFor="leave-employee">Employee</Label>
-            <Select id="leave-employee" name="employee_id" required>
-              <option value="">Select employee</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name} · {employee.role}
-                </option>
-              ))}
-            </Select>
-          </div>
+          {employees ? (
+            <div className="space-y-2">
+              <Label htmlFor="leave-employee">Employee</Label>
+              <Select id="leave-employee" name="employee_id" required>
+                <option value="">Select employee</option>
+                {employees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name} - {employee.role}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="leave-date">Leave date</Label>
             <Input id="leave-date" name="date" type="date" required />
@@ -71,7 +73,7 @@ export function LeaveForm({
             />
           </div>
           <Button disabled={pending} type="submit">
-            {pending ? "Saving..." : "Add leave"}
+            {pending ? "Saving..." : employees ? "Add leave" : "Submit request"}
           </Button>
         </form>
       </CardContent>

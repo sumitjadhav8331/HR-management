@@ -14,10 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-export function AuthForm() {
+export function AuthForm({ supabaseConfigured }: { supabaseConfigured: boolean }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [mode, setMode] = useState<"login" | "signup">("login");
+  const [loginRole, setLoginRole] = useState<"hr" | "employee">("hr");
   const [pending, startTransition] = useTransition();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -77,55 +78,119 @@ export function AuthForm() {
       <CardHeader className="space-y-3">
         <p className="eyebrow">Secure access</p>
         <CardTitle className="text-3xl">
-          {mode === "login" ? "Sign in to HR workspace" : "Create the HR account"}
+          {mode === "login"
+            ? loginRole === "employee"
+              ? "Employee login"
+              : "Sign in to HR workspace"
+            : "Create the HR account"}
         </CardTitle>
         <p className="text-sm leading-7 text-muted-foreground">
-          Use Supabase email/password authentication with persistent protected sessions.
+          {mode === "login"
+            ? loginRole === "employee"
+              ? "Employees can sign in with credentials provided by HR and access attendance, tasks, and leave flow."
+              : "Use Supabase email/password authentication with persistent protected sessions."
+            : "Create an HR account to manage employees, attendance, and reports."}
         </p>
         <div className="inline-flex rounded-full bg-secondary p-1">
           <button
             className={cn(
-              buttonVariants({ variant: mode === "login" ? "default" : "ghost", size: "sm" }),
+              buttonVariants({
+                variant: mode === "login" && loginRole === "hr" ? "default" : "ghost",
+                size: "sm",
+              }),
               "rounded-full",
             )}
-            onClick={() => setMode("login")}
+            disabled={!supabaseConfigured}
+            onClick={() => {
+              setMode("login");
+              setLoginRole("hr");
+            }}
             type="button"
           >
-            Login
+            HR login
           </button>
           <button
             className={cn(
-              buttonVariants({ variant: mode === "signup" ? "default" : "ghost", size: "sm" }),
+              buttonVariants({
+                variant: mode === "login" && loginRole === "employee" ? "default" : "ghost",
+                size: "sm",
+              }),
               "rounded-full",
             )}
-            onClick={() => setMode("signup")}
+            disabled={!supabaseConfigured}
+            onClick={() => {
+              setMode("login");
+              setLoginRole("employee");
+            }}
             type="button"
           >
-            Create account
+            Employee login
           </button>
         </div>
+        {loginRole === "hr" ? (
+          <div className="inline-flex rounded-full bg-secondary p-1">
+            <button
+              className={cn(
+                buttonVariants({ variant: mode === "login" ? "default" : "ghost", size: "sm" }),
+                "rounded-full",
+              )}
+              disabled={!supabaseConfigured}
+              onClick={() => {
+                setMode("login");
+                setLoginRole("hr");
+              }}
+              type="button"
+            >
+              Admin login
+            </button>
+            <button
+              className={cn(
+                buttonVariants({ variant: mode === "signup" ? "default" : "ghost", size: "sm" }),
+                "rounded-full",
+              )}
+              disabled={!supabaseConfigured}
+              onClick={() => setMode("signup")}
+              type="button"
+            >
+              Create account
+            </button>
+          </div>
+        ) : null}
+        {!supabaseConfigured ? (
+          <div className="rounded-2xl border border-amber-300/50 bg-amber-100/70 px-4 py-3 text-sm leading-6 text-amber-950">
+            Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to `.env.local`,
+            then restart the dev server before using login.
+          </div>
+        ) : null}
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={handleSubmit} ref={formRef}>
           {mode === "signup" ? (
             <div className="space-y-2">
               <Label htmlFor="full_name">Full name</Label>
-              <Input id="full_name" name="full_name" placeholder="HR Manager" />
+              <Input
+                disabled={!supabaseConfigured || pending}
+                id="full_name"
+                name="full_name"
+                placeholder="HR Manager"
+              />
             </div>
           ) : null}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
+              disabled={!supabaseConfigured || pending}
               id="email"
               name="email"
               type="email"
-              placeholder="hr@company.com"
+              placeholder={loginRole === "employee" ? "employee@company.com" : "hr@company.com"}
               required
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
             <Input
+              disabled={!supabaseConfigured || pending}
               id="password"
               name="password"
               type="password"
@@ -133,7 +198,7 @@ export function AuthForm() {
               required
             />
           </div>
-          <Button className="w-full" disabled={pending} type="submit">
+          <Button className="w-full" disabled={!supabaseConfigured || pending} type="submit">
             {pending
               ? "Please wait..."
               : mode === "login"
@@ -143,7 +208,7 @@ export function AuthForm() {
           {mode === "login" ? (
             <button
               className="w-full text-sm font-medium text-primary transition hover:opacity-80"
-              disabled={pending}
+              disabled={!supabaseConfigured || pending}
               onClick={handleResendVerification}
               type="button"
             >

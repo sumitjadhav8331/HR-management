@@ -45,9 +45,11 @@ cp .env.example .env.local
 3. Add your Supabase project values to `.env.local`:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
+
+If these values are missing, the login page will stay disabled and show a setup message until you add them and restart `npm run dev`.
 
 4. Apply the schema in Supabase:
 

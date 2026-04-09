@@ -1,13 +1,14 @@
 import { ZodError } from "zod";
-import { requireUser } from "@/lib/auth";
+import { requireProfile } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/types";
+import type { Tables } from "@/lib/supabase/database.types";
 
 export async function getActionContext() {
-  const user = await requireUser();
+  const { user, profile, employee } = await requireProfile();
   const supabase = await createServerSupabaseClient();
 
-  return { user, supabase };
+  return { user, profile, employee, supabase };
 }
 
 export function toFieldErrors(error: ZodError) {
@@ -34,6 +35,20 @@ export function successResult<T = undefined>(
 
 export function errorResult(message: string): ActionResult {
   return { success: false, message };
+}
+
+export function requireHrAction(profile: Pick<Tables<"users">, "role">) {
+  return profile.role === "hr"
+    ? null
+    : errorResult("Only HR accounts can perform this action.");
+}
+
+export function requireEmployeeLinkAction(employee: Tables<"employees"> | null) {
+  return employee
+    ? null
+    : errorResult(
+        "Your login is not linked to an employee profile yet. Ask HR to finish your account setup.",
+      );
 }
 
 export function getString(formData: FormData, key: string) {

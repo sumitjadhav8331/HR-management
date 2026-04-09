@@ -5,7 +5,7 @@ import {
   startOfToday,
   subDays,
 } from "date-fns";
-import { getUserLabel, requireProfile } from "@/lib/auth";
+import { getUserLabel, requireHrProfile } from "@/lib/auth";
 import { PAGE_SIZE, REPORT_STORAGE_BUCKET } from "@/lib/constants";
 import type { Tables } from "@/lib/supabase/database.types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -18,6 +18,10 @@ type AttendanceWithEmployee = Tables<"attendance"> & {
 
 type LeaveWithEmployee = Tables<"leaves"> & {
   employee: Pick<Tables<"employees">, "id" | "name" | "role"> | null;
+};
+
+type TaskWithAssignee = Tables<"tasks"> & {
+  assignee: Pick<Tables<"employees">, "id" | "name"> | null;
 };
 
 type ReportWithDownload = Tables<"reports"> & {
@@ -44,7 +48,7 @@ function toDateRangeDays(selectedDate: string, days: number) {
 }
 
 export async function getDashboardData(date?: string) {
-  const { user, profile } = await requireProfile();
+  const { user, profile } = await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const selectedDate = date || dateKey(new Date());
   const trendDays = toDateRangeDays(selectedDate, 7);
@@ -167,7 +171,7 @@ export async function getDashboardData(date?: string) {
 }
 
 export async function getEmployeeOptions() {
-  await requireProfile();
+  await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const { data } = await supabase
     .from("employees")
@@ -183,7 +187,7 @@ export async function getEmployeesPageData({
   status,
   editId,
 }: SearchParamsInput) {
-  await requireProfile();
+  await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
   let builder = supabase
@@ -220,7 +224,7 @@ export async function getAttendancePageData({
   date,
   editId,
 }: SearchParamsInput) {
-  await requireProfile();
+  await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const selectedDate = date || dateKey(new Date());
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
@@ -277,7 +281,7 @@ export async function getRecruitmentPageData({
   status,
   editId,
 }: SearchParamsInput) {
-  await requireProfile();
+  await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
   let builder = supabase
@@ -347,12 +351,12 @@ export async function getTasksPageData({
   status,
   editId,
 }: SearchParamsInput) {
-  await requireProfile();
+  await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
   let builder = supabase
     .from("tasks")
-    .select("*", { count: "exact" })
+    .select("*, assignee:employees(id, name)", { count: "exact" })
     .order("status", { ascending: true })
     .order("deadline", { ascending: true });
 
@@ -360,7 +364,7 @@ export async function getTasksPageData({
     builder = builder.eq("status", status as Tables<"tasks">["status"]);
   }
 
-  const [listResult, editResult, completedResult, pendingResult, allTasksResult] =
+  const [listResult, editResult, completedResult, pendingResult, allTasksResult, employees] =
     await Promise.all([
       builder.range(offset, offset + PAGE_SIZE - 1),
       editId
@@ -375,6 +379,7 @@ export async function getTasksPageData({
         .select("*", { count: "exact", head: true })
         .eq("status", "pending"),
       supabase.from("tasks").select("deadline, status"),
+      getEmployeeOptions(),
     ]);
 
   const today = startOfToday();
@@ -386,8 +391,9 @@ export async function getTasksPageData({
   ).length;
 
   return {
-    tasks: (listResult.data ?? []) as Tables<"tasks">[],
+    tasks: (listResult.data ?? []) as TaskWithAssignee[],
     editingTask: (editResult.data ?? null) as Tables<"tasks"> | null,
+    employees,
     pagination: buildPagination(listResult.count ?? 0, page ?? 1, PAGE_SIZE),
     metrics: {
       completed: completedResult.count ?? 0,
@@ -398,7 +404,7 @@ export async function getTasksPageData({
 }
 
 export async function getLeavesPageData({ page, date }: SearchParamsInput) {
-  await requireProfile();
+  await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
   let builder = supabase
@@ -410,20 +416,37 @@ export async function getLeavesPageData({ page, date }: SearchParamsInput) {
     builder = builder.eq("date", date);
   }
 
-  const [listResult, employees] = await Promise.all([
+  const [listResult, employees, pendingCount, approvedCount, rejectedCount] = await Promise.all([
     builder.range(offset, offset + PAGE_SIZE - 1),
     getEmployeeOptions(),
+    supabase
+      .from("leaves")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "pending"),
+    supabase
+      .from("leaves")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "approved"),
+    supabase
+      .from("leaves")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "rejected"),
   ]);
 
   return {
     leaves: ((listResult.data ?? []) as LeaveWithEmployee[]) ?? [],
     employees,
+    metrics: {
+      approved: approvedCount.count ?? 0,
+      pending: pendingCount.count ?? 0,
+      rejected: rejectedCount.count ?? 0,
+    },
     pagination: buildPagination(listResult.count ?? 0, page ?? 1, PAGE_SIZE),
   };
 }
 
 export async function getNotesForDate(date: string) {
-  await requireProfile();
+  await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const { data } = await supabase
     .from("notes")
@@ -438,7 +461,7 @@ export async function buildDailyReportSummary(
   date: string,
   overallNotes = "",
 ): Promise<DailyReportSummary> {
-  const { user, profile } = await requireProfile();
+  const { user, profile } = await requireHrProfile();
   const supabase = await createServerSupabaseClient();
 
   const [candidatesResult, attendanceResult, tasksResult, notesResult, employeesResult] =
@@ -520,7 +543,7 @@ export async function buildDailyReportSummary(
 }
 
 export async function getReportsPageData({ page, date }: SearchParamsInput) {
-  await requireProfile();
+  await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const selectedDate = date || dateKey(new Date());
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
@@ -557,7 +580,7 @@ export async function getReportsPageData({ page, date }: SearchParamsInput) {
 }
 
 export async function getSalariesPageData({ page, editId }: SearchParamsInput) {
-  await requireProfile();
+  await requireHrProfile();
   const supabase = await createServerSupabaseClient();
   const offset = ((page ?? 1) - 1) * PAGE_SIZE;
 

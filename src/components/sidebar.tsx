@@ -18,8 +18,9 @@ import { useUiStore } from "@/lib/stores/ui-store";
 import { cn, getInitials } from "@/lib/utils";
 import { SignOutButton } from "@/components/sign-out-button";
 import { Button } from "@/components/ui/button";
+import type { Tables } from "@/lib/supabase/database.types";
 
-const navItems = [
+const hrNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/employees", label: "Employees", icon: UsersRound },
   { href: "/attendance", label: "Attendance", icon: Activity },
@@ -31,16 +32,28 @@ const navItems = [
   { href: "/profile", label: "Profile", icon: UserCircle2 },
 ];
 
+const employeeNavItems = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/attendance", label: "Attendance", icon: Activity },
+  { href: "/tasks", label: "Tasks", icon: NotebookPen },
+  { href: "/leaves", label: "Leaves", icon: CalendarDays },
+  { href: "/salary", label: "Salary", icon: Landmark },
+  { href: "/profile", label: "Profile", icon: UserCircle2 },
+];
+
 export function Sidebar({
   userLabel,
   email,
+  role,
 }: {
   userLabel: string;
   email: string;
+  role: Tables<"users">["role"];
 }) {
   const pathname = usePathname();
   const mobileNavOpen = useUiStore((state) => state.mobileNavOpen);
   const setMobileNavOpen = useUiStore((state) => state.setMobileNavOpen);
+  const navItems = role === "hr" ? hrNavItems : employeeNavItems;
 
   return (
     <>
@@ -60,7 +73,7 @@ export function Sidebar({
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-white/55">
-              HR OPS
+              {role === "hr" ? "HR OPS" : "EMPLOYEE"}
             </p>
             <h2 className="pt-1 text-2xl font-semibold">PulseBoard</h2>
           </div>
@@ -109,10 +122,12 @@ export function Sidebar({
         <div className="border-t border-white/10 px-6 py-5">
           <div className="rounded-3xl bg-white/6 p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-white/45">
-              Daily report
+              {role === "hr" ? "Daily report" : "Your workday"}
             </p>
             <p className="mt-2 text-sm leading-6 text-white/70">
-              Track calls, attendance, pending work, and send a PDF summary to leadership.
+              {role === "hr"
+                ? "Track calls, attendance, pending work, and send a PDF summary to leadership."
+                : "Check in with location, finish assigned tasks, and keep your records current."}
             </p>
           </div>
           <div className="pt-4">

@@ -71,14 +71,17 @@ export default async function EmployeesPage({
             />
           ) : (
             <>
-              <div className="table-shell">
-                <Table>
+              <div className="table-shell w-full max-w-full">
+                <Table className="min-w-[1320px] [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Role</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Salary</TableHead>
                       <TableHead>Contact</TableHead>
                       <TableHead>Joining Date</TableHead>
+                      <TableHead>Access</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -86,7 +89,7 @@ export default async function EmployeesPage({
                   <TableBody>
                     {employeeData.employees.map((employee) => (
                       <TableRow key={employee.id}>
-                        <TableCell>
+                        <TableCell className="whitespace-normal">
                           <div>
                             <p className="font-semibold">{employee.name}</p>
                             <p className="text-xs text-muted-foreground">
@@ -95,8 +98,11 @@ export default async function EmployeesPage({
                           </div>
                         </TableCell>
                         <TableCell>{employee.role}</TableCell>
+                        <TableCell>{employee.department}</TableCell>
+                        <TableCell>{Number(employee.salary ?? 0).toFixed(2)}</TableCell>
                         <TableCell>{employee.phone}</TableCell>
                         <TableCell>{formatDate(employee.joining_date)}</TableCell>
+                        <TableCell>{employee.user_id ? "Login linked" : "No login yet"}</TableCell>
                         <TableCell>
                           <StatusBadge value={employee.status} />
                         </TableCell>

@@ -1,13 +1,15 @@
 import { redirect } from "next/navigation";
 import { ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
-import { AuthForm } from "@/components/forms/auth-form";
+import { AuthFormClientOnly } from "@/components/forms/auth-form-client-only";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
+import { isSupabaseConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
   const user = await getCurrentUser();
+  const supabaseConfigured = isSupabaseConfigured();
 
   if (user) {
     redirect("/dashboard");
@@ -58,7 +60,7 @@ export default async function LoginPage() {
           </div>
         </section>
         <div className="flex justify-center lg:justify-end">
-          <AuthForm />
+          <AuthFormClientOnly supabaseConfigured={supabaseConfigured} />
         </div>
       </div>
     </div>

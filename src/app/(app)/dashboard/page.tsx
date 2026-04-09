@@ -1,5 +1,7 @@
 import {
+  AlertTriangle,
   CheckCircle2,
+  ClipboardCheck,
   ClipboardList,
   PhoneCall,
   UsersRound,
@@ -14,18 +16,183 @@ import { PageHeader } from "@/components/page-header";
 import { MetricCard } from "@/components/metric-card";
 import { ServerActionButton } from "@/components/server-action-button";
 import { StatusBadge } from "@/components/status-badge";
+import { getEmployeeDashboardData } from "@/lib/employee-queries";
 import { getDashboardData } from "@/lib/queries";
 import type { AsyncSearchParams } from "@/lib/search-params";
 import { getParamValue } from "@/lib/search-params";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatHours } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { requireProfile } from "@/lib/auth";
 
 export default async function DashboardPage({
   searchParams,
 }: {
   searchParams: AsyncSearchParams;
 }) {
+  const { profile } = await requireProfile();
+
+  if (profile.role === "employee") {
+    const employeeData = await getEmployeeDashboardData();
+
+    return (
+      <>
+        <PageHeader
+          eyebrow="Dashboard"
+          title="Your workday overview"
+          description="Track attendance, assigned tasks, leave progress, and your latest salary status."
+        />
+
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            helper="Tasks waiting for completion"
+            icon={<ClipboardList className="h-5 w-5" />}
+            label="Pending Tasks"
+            value={String(employeeData.metrics.pendingTasks)}
+          />
+          <MetricCard
+            helper="Completed assigned tasks"
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            label="Completed Tasks"
+            value={String(employeeData.metrics.completedTasks)}
+          />
+          <MetricCard
+            helper="Leave requests awaiting HR review"
+            icon={<AlertTriangle className="h-5 w-5" />}
+            label="Pending Leaves"
+            value={String(employeeData.metrics.pendingLeaves)}
+          />
+          <MetricCard
+            helper={employeeData.todayAttendance ? "Checked in today" : "No check-in yet"}
+            icon={<ClipboardCheck className="h-5 w-5" />}
+            label="Today's Attendance"
+            value={
+              employeeData.todayAttendance
+                ? employeeData.todayAttendance.logout_time
+                  ? "Checked out"
+                  : "Checked in"
+                : "Absent"
+            }
+          />
+        </div>
+
+        <div className="section-grid">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Today&apos;s attendance</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {employeeData.todayAttendance ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-border/70 bg-white/65 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Check in</p>
+                      <p className="pt-2 text-lg font-semibold">
+                        {formatDate(employeeData.todayAttendance.login_time, "dd MMM yyyy, hh:mm a")}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-border/70 bg-white/65 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Check out</p>
+                      <p className="pt-2 text-lg font-semibold">
+                        {employeeData.todayAttendance.logout_time
+                          ? formatDate(employeeData.todayAttendance.logout_time, "dd MMM yyyy, hh:mm a")
+                          : "In progress"}
+                      </p>
+                      <p className="pt-1 text-xs text-muted-foreground">
+                        Total: {formatHours(employeeData.todayAttendance.total_hours)}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    You have not checked in yet today.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Assigned tasks</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {employeeData.tasks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No tasks assigned yet.
+                  </p>
+                ) : (
+                  employeeData.tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex items-start justify-between gap-3 rounded-2xl border border-border/70 bg-white/70 p-3"
+                    >
+                      <div>
+                        <p className="font-semibold">{task.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Deadline: {task.deadline ? formatDate(task.deadline) : "No deadline"}
+                        </p>
+                      </div>
+                      <StatusBadge value={task.status} />
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Latest salary record</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {employeeData.latestSalary ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Month: {formatDate(employeeData.latestSalary.month, "MMM yyyy")}
+                    </p>
+                    <p className="text-3xl font-semibold">
+                      {(employeeData.latestSalary.amount + employeeData.latestSalary.bonus - employeeData.latestSalary.deduction).toFixed(2)}
+                    </p>
+                    <StatusBadge value={employeeData.latestSalary.payment_status} />
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Salary information is not available yet.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent leave requests</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {employeeData.recentLeaves.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No leave requests yet.</p>
+                ) : (
+                  employeeData.recentLeaves.map((leave) => (
+                    <div
+                      key={leave.id}
+                      className="flex items-center justify-between rounded-2xl border border-border/70 bg-white/70 p-3"
+                    >
+                      <div>
+                        <p className="font-medium">{formatDate(leave.date)}</p>
+                        <p className="text-xs text-muted-foreground">{leave.reason}</p>
+                      </div>
+                      <StatusBadge value={leave.status} />
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   const resolvedSearchParams = await searchParams;
   const selectedDate = getParamValue(resolvedSearchParams.date);
   const dashboard = await getDashboardData(selectedDate);

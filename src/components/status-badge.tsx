@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 
-export function StatusBadge({ value }: { value: string }) {
-  const normalized = value.toLowerCase();
+export function StatusBadge({ value }: { value?: string | null }) {
+  const normalized = value?.toLowerCase?.() ?? "unknown";
 
   if (["active", "joined", "completed", "done", "interested"].includes(normalized)) {
     return <Badge variant="success">{normalized.replaceAll("_", " ")}</Badge>;

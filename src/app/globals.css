@@ -116,7 +116,7 @@ a:focus-visible {
 }
 
 .table-shell {
-  @apply overflow-hidden rounded-[calc(var(--radius)-0.25rem)] border border-border/80 bg-white/70;
+  @apply overflow-x-scroll overflow-y-hidden rounded-[calc(var(--radius)-0.25rem)] border border-border/80 bg-white/70;
 }
 
 .muted-copy {

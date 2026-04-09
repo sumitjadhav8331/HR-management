@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   errorResult,
   getActionContext,
+  requireHrAction,
   getString,
   successResult,
   validationError,
@@ -12,6 +13,13 @@ import { salarySchema } from "@/lib/validators";
 
 export async function saveSalaryAction(formData: FormData) {
   const id = getString(formData, "id");
+  const { profile, supabase } = await getActionContext();
+  const hrGuard = requireHrAction(profile);
+
+  if (hrGuard) {
+    return hrGuard;
+  }
+
   const parsed = salarySchema.safeParse({
     employee_id: getString(formData, "employee_id"),
     amount: getString(formData, "amount"),
@@ -26,7 +34,6 @@ export async function saveSalaryAction(formData: FormData) {
     return validationError(parsed.error);
   }
 
-  const { supabase } = await getActionContext();
   const payload = {
     employee_id: parsed.data.employee_id,
     amount: parsed.data.amount,
@@ -51,7 +58,13 @@ export async function saveSalaryAction(formData: FormData) {
 }
 
 export async function deleteSalaryAction(id: string) {
-  const { supabase } = await getActionContext();
+  const { profile, supabase } = await getActionContext();
+  const hrGuard = requireHrAction(profile);
+
+  if (hrGuard) {
+    return hrGuard;
+  }
+
   const { error } = await supabase.from("salaries").delete().eq("id", id);
 
   if (error) {

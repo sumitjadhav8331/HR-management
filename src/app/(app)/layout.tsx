@@ -14,6 +14,7 @@ export default async function ProtectedLayout({
   return (
     <AppShell
       email={user.email ?? profile?.email ?? ""}
+      role={profile.role}
       userLabel={getUserLabel(profile, user.email)}
     >
       {children}

@@ -3,6 +3,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { errorResult, successResult, validationError } from "@/lib/action-utils";
 import { ensureUserRecord } from "@/lib/auth";
+import { getSupabaseEnvErrorMessage, isSupabaseConfigured } from "@/lib/env";
 import { loginSchema, signupSchema } from "@/lib/validators";
 
 function isEmailConfirmationError(message?: string) {
@@ -14,6 +15,10 @@ function isEmailConfirmationError(message?: string) {
 }
 
 export async function loginAction(formData: FormData) {
+  if (!isSupabaseConfigured()) {
+    return errorResult(getSupabaseEnvErrorMessage());
+  }
+
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
@@ -48,6 +53,10 @@ export async function loginAction(formData: FormData) {
 }
 
 export async function signUpAction(formData: FormData) {
+  if (!isSupabaseConfigured()) {
+    return errorResult(getSupabaseEnvErrorMessage());
+  }
+
   const parsed = signupSchema.safeParse({
     full_name: formData.get("full_name"),
     email: formData.get("email"),
@@ -85,6 +94,10 @@ export async function signUpAction(formData: FormData) {
 }
 
 export async function resendVerificationAction(formData: FormData) {
+  if (!isSupabaseConfigured()) {
+    return errorResult(getSupabaseEnvErrorMessage());
+  }
+
   const parsed = loginSchema.pick({ email: true }).safeParse({
     email: formData.get("email"),
   });
@@ -107,6 +120,10 @@ export async function resendVerificationAction(formData: FormData) {
 }
 
 export async function signOutAction() {
+  if (!isSupabaseConfigured()) {
+    return errorResult(getSupabaseEnvErrorMessage());
+  }
+
   const supabase = await createServerSupabaseClient();
   const { error } = await supabase.auth.signOut();
 

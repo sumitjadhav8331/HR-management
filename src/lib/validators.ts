@@ -35,8 +35,14 @@ export const employeeSchema = z.object({
   phone: z.string().trim().min(8, "Phone number is required."),
   email: optionalEmailSchema,
   role: z.string().trim().min(2, "Role is required."),
+  department: z.string().trim().min(2, "Department is required."),
+  salary: z.coerce.number().min(0, "Salary must be 0 or greater."),
   joining_date: z.string().trim().min(1, "Joining date is required."),
   status: z.enum(employeeStatuses),
+  password: z.string().trim().min(6, "Password must be at least 6 characters.").optional(),
+}).refine((value) => !value.password || value.email.length > 0, {
+  path: ["email"],
+  message: "Email is required to create login credentials.",
 });
 
 export const attendanceSchema = z
@@ -73,9 +79,11 @@ export const candidateSchema = z.object({
 export const taskSchema = z.object({
   title: z.string().trim().min(2, "Task title is required."),
   description: z.string().trim().optional(),
+  assigned_to: z.string().uuid("Assign the task to an employee."),
   status: z.enum(taskStatuses).default("pending"),
   priority: z.enum(taskPriorities),
   deadline: optionalDateSchema.optional(),
+  completion_notes: z.string().trim().optional(),
 });
 
 export const leaveSchema = z.object({

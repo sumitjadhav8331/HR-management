@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   errorResult,
   getActionContext,
+  requireHrAction,
   getString,
   successResult,
   validationError,
@@ -11,6 +12,13 @@ import {
 import { noteSchema } from "@/lib/validators";
 
 export async function saveNoteAction(formData: FormData) {
+  const { profile, supabase } = await getActionContext();
+  const hrGuard = requireHrAction(profile);
+
+  if (hrGuard) {
+    return hrGuard;
+  }
+
   const parsed = noteSchema.safeParse({
     title: getString(formData, "title"),
     content: getString(formData, "content"),
@@ -23,7 +31,6 @@ export async function saveNoteAction(formData: FormData) {
     return validationError(parsed.error);
   }
 
-  const { supabase } = await getActionContext();
   const { error } = await supabase.from("notes").insert(parsed.data);
 
   if (error) {
@@ -40,7 +47,13 @@ export async function toggleNoteStatusAction(
   id: string,
   nextStatus: "open" | "done",
 ) {
-  const { supabase } = await getActionContext();
+  const { profile, supabase } = await getActionContext();
+  const hrGuard = requireHrAction(profile);
+
+  if (hrGuard) {
+    return hrGuard;
+  }
+
   const { error } = await supabase
     .from("notes")
     .update({ status: nextStatus })
@@ -59,7 +72,13 @@ export async function toggleNoteStatusAction(
 }
 
 export async function deleteNoteAction(id: string) {
-  const { supabase } = await getActionContext();
+  const { profile, supabase } = await getActionContext();
+  const hrGuard = requireHrAction(profile);
+
+  if (hrGuard) {
+    return hrGuard;
+  }
+
   const { error } = await supabase.from("notes").delete().eq("id", id);
 
   if (error) {

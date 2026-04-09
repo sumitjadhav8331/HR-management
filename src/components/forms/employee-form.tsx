@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useTransition } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { type FormEvent, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { saveEmployeeAction } from "@/app/actions/employees";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -19,6 +20,7 @@ export function EmployeeForm({
   initialData?: Tables<"employees"> | null;
 }) {
   const router = useRouter();
+  const [showPassword, setShowPassword] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -93,6 +95,30 @@ export function EmployeeForm({
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
+              <Label htmlFor="employee-department">Department</Label>
+              <Input
+                id="employee-department"
+                name="department"
+                defaultValue={initialData?.department ?? "General"}
+                placeholder="Operations"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employee-salary">Monthly salary</Label>
+              <Input
+                id="employee-salary"
+                name="salary"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue={initialData?.salary ?? 0}
+                required
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
               <Label htmlFor="employee-joining-date">Joining date</Label>
               <Input
                 id="employee-joining-date"
@@ -115,6 +141,40 @@ export function EmployeeForm({
               </Select>
             </div>
           </div>
+          {initialData?.user_id ? (
+            <div className="rounded-2xl border border-emerald-300/60 bg-emerald-100/70 px-4 py-3 text-sm leading-6 text-emerald-950">
+              Login account linked. This employee can sign in with the assigned work email.
+            </div>
+          ) : (
+            <div className="space-y-2 rounded-2xl border border-border/70 bg-secondary/40 p-4">
+              <Label htmlFor="employee-password">Initial login password</Label>
+              <div className="relative">
+                <Input
+                  id="employee-password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  minLength={6}
+                  placeholder="Create a password for the employee"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
+                  onClick={() => setShowPassword((value) => !value)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              <p className="text-xs leading-6 text-muted-foreground">
+                Add an email and password to create a login account for this employee.
+              </p>
+            </div>
+          )}
           <div className="flex flex-wrap gap-3">
             <Button disabled={pending} type="submit">
               {pending ? "Saving..." : initialData ? "Update employee" : "Add employee"}
