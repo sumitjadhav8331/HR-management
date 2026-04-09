@@ -11,7 +11,6 @@ import {
   validationError,
 } from "@/lib/action-utils";
 import { hashPassword } from "@/lib/server/password";
-import { sql } from "@/lib/server/postgres";
 import { employeeSchema } from "@/lib/validators";
 
 function isMissingEmployeeColumnError(message: string) {
@@ -67,18 +66,24 @@ export async function saveEmployeeAction(formData: FormData) {
   const normalizedEmail = getOptionalString(formData, "email")?.toLowerCase() ?? null;
 
   if (normalizedEmail) {
-    const duplicateEmailResult = await sql<{ id: string }>(
-      `
-        select id
-        from public.employees
-        where lower(email) = lower($1)
-          and ($2::uuid is null or id <> $2::uuid)
-        limit 1
-      `,
-      [normalizedEmail, id || null],
+    const duplicateEmailResult = await supabase
+      .from("employees")
+      .select("id, email")
+      .ilike("email", normalizedEmail)
+      .limit(10);
+
+    if (duplicateEmailResult.error) {
+      return errorResult(duplicateEmailResult.error.message);
+    }
+
+    const hasDuplicateEmail = (duplicateEmailResult.data ?? []).some(
+      (employee) =>
+        employee.id !== id &&
+        typeof employee.email === "string" &&
+        employee.email.toLowerCase() === normalizedEmail,
     );
 
-    if (duplicateEmailResult.rows[0]) {
+    if (hasDuplicateEmail) {
       return errorResult("Another employee already uses this email. Use a different employee email.");
     }
   }

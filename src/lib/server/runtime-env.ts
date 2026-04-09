@@ -1,10 +1,10 @@
 import "server-only";
 
 const POSTGRES_ENV_KEYS = [
-  "DIRECT_URL",
-  "POSTGRES_URL_NON_POOLING",
   "DATABASE_URL",
   "POSTGRES_URL",
+  "DIRECT_URL",
+  "POSTGRES_URL_NON_POOLING",
   "POSTGRES_PRISMA_URL",
 ] as const;
 
