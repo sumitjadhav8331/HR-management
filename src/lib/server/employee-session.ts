@@ -2,6 +2,11 @@ import "server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import {
+  assertEmployeeSessionEnv,
+  getEmployeeSessionSecret,
+  isEmployeeSessionConfigured,
+} from "@/lib/server/runtime-env";
 
 const EMPLOYEE_SESSION_COOKIE = "employee_session";
 const EMPLOYEE_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -14,13 +19,8 @@ type EmployeeSessionPayload = {
 };
 
 function getSessionSecret() {
-  const secret = process.env.APP_SESSION_SECRET;
-
-  if (!secret) {
-    throw new Error("APP_SESSION_SECRET is required for employee login sessions.");
-  }
-
-  return secret;
+  assertEmployeeSessionEnv();
+  return getEmployeeSessionSecret()!;
 }
 
 function signPayload(payload: string) {
@@ -77,6 +77,10 @@ function decodeSession(sessionToken: string) {
 }
 
 export async function getEmployeeSession() {
+  if (!isEmployeeSessionConfigured()) {
+    return null;
+  }
+
   const cookieStore = await cookies();
   const rawSession = cookieStore.get(EMPLOYEE_SESSION_COOKIE)?.value;
 
@@ -88,6 +92,8 @@ export async function getEmployeeSession() {
 }
 
 export async function createEmployeeSession(employeeId: string) {
+  assertEmployeeSessionEnv();
+
   const cookieStore = await cookies();
   const issuedAt = Date.now();
   const expiresAt = issuedAt + EMPLOYEE_SESSION_MAX_AGE_SECONDS * 1000;

@@ -7,6 +7,12 @@ import {
   clearEmployeeSession,
 } from "@/lib/server/employee-session";
 import { findEmployeeAccountsByEmail } from "@/lib/server/employee-auth";
+import {
+  getEmployeeSessionEnvErrorMessage,
+  getPostgresEnvErrorMessage,
+  isEmployeeSessionConfigured,
+  isPostgresConfigured,
+} from "@/lib/server/runtime-env";
 import { hashPassword, verifyPassword } from "@/lib/server/password";
 import { errorResult, successResult, validationError } from "@/lib/action-utils";
 import { ensureUserRecord } from "@/lib/auth";
@@ -105,6 +111,14 @@ export async function signUpAction(formData: FormData) {
 }
 
 export async function employeeLoginAction(formData: FormData) {
+  if (!isPostgresConfigured()) {
+    return errorResult(getPostgresEnvErrorMessage());
+  }
+
+  if (!isEmployeeSessionConfigured()) {
+    return errorResult(getEmployeeSessionEnvErrorMessage());
+  }
+
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),

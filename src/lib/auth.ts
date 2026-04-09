@@ -7,6 +7,10 @@ import {
   getEmployeeAccountById,
 } from "@/lib/server/employee-auth";
 import { getEmployeeSession } from "@/lib/server/employee-session";
+import {
+  isEmployeeSessionConfigured,
+  isPostgresConfigured,
+} from "@/lib/server/runtime-env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Tables } from "@/lib/supabase/database.types";
 
@@ -22,6 +26,10 @@ type AppSessionContext = {
 };
 
 async function getEmployeeSessionContext(): Promise<AppSessionContext | null> {
+  if (!isEmployeeSessionConfigured() || !isPostgresConfigured()) {
+    return null;
+  }
+
   const employeeSession = await getEmployeeSession();
 
   if (!employeeSession) {

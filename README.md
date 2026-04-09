@@ -47,9 +47,14 @@ cp .env.example .env.local
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+APP_SESSION_SECRET=replace-with-a-long-random-secret
+DATABASE_URL=postgresql://postgres:[password]@db.your-project-ref.supabase.co:5432/postgres
+DIRECT_URL=postgresql://postgres:[password]@db.your-project-ref.supabase.co:5432/postgres
 ```
 
-If these values are missing, the login page will stay disabled and show a setup message until you add them and restart `npm run dev`.
+If your provider shows a `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` instead of `NEXT_PUBLIC_SUPABASE_ANON_KEY`, this app accepts that name too.
+
+If these values are missing, HR login will stay disabled and employee login can fail until you add them and restart `npm run dev`.
 
 4. Apply the schema in Supabase:
 
@@ -110,7 +115,11 @@ Generated PDFs are uploaded to the private `daily-reports` bucket and listed in 
 ```env
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
+APP_SESSION_SECRET
+DATABASE_URL
 ```
+
+If your deployment uses Vercel Postgres, this app also accepts `POSTGRES_URL` or `POSTGRES_URL_NON_POOLING` automatically. If your Supabase dashboard exposes `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, you can use that instead of `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 4. Redeploy after the variables are added.
 

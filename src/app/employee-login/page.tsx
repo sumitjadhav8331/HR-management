@@ -4,11 +4,24 @@ import { EmployeeAuthForm } from "@/components/forms/employee-auth-form";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCurrentSession, getUserLabel } from "@/lib/auth";
+import {
+  getEmployeeSessionEnvErrorMessage,
+  getPostgresEnvErrorMessage,
+  isEmployeeSessionConfigured,
+  isPostgresConfigured,
+} from "@/lib/server/runtime-env";
 
 export const dynamic = "force-dynamic";
 
 export default async function EmployeeLoginPage() {
   const session = await getCurrentSession();
+  const employeeLoginConfigured =
+    isEmployeeSessionConfigured() && isPostgresConfigured();
+  const employeeLoginConfigMessage = !isPostgresConfigured()
+    ? getPostgresEnvErrorMessage()
+    : !isEmployeeSessionConfigured()
+      ? getEmployeeSessionEnvErrorMessage()
+      : null;
 
   return (
     <div className="min-h-screen bg-transparent">
@@ -76,7 +89,10 @@ export default async function EmployeeLoginPage() {
           ) : null}
         </section>
         <div className="flex justify-center lg:justify-end">
-          <EmployeeAuthForm />
+          <EmployeeAuthForm
+            configMessage={employeeLoginConfigMessage}
+            isConfigured={employeeLoginConfigured}
+          />
         </div>
       </div>
     </div>

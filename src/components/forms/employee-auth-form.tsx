@@ -11,7 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-export function EmployeeAuthForm() {
+export function EmployeeAuthForm({
+  isConfigured,
+  configMessage,
+}: {
+  isConfigured: boolean;
+  configMessage?: string | null;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -49,12 +55,18 @@ export function EmployeeAuthForm() {
         >
           Back to HR login
         </Link>
+        {!isConfigured ? (
+          <div className="rounded-2xl border border-amber-300/50 bg-amber-100/70 px-4 py-3 text-sm leading-6 text-amber-950">
+            {configMessage ?? "Employee login is not configured yet."}
+          </div>
+        ) : null}
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <Label htmlFor="employee-email">Email</Label>
             <Input
+              disabled={!isConfigured || pending}
               id="employee-email"
               name="email"
               type="email"
@@ -65,6 +77,7 @@ export function EmployeeAuthForm() {
           <div className="space-y-2">
             <Label htmlFor="employee-password">Password</Label>
             <Input
+              disabled={!isConfigured || pending}
               id="employee-password"
               name="password"
               type="password"
@@ -72,7 +85,7 @@ export function EmployeeAuthForm() {
               required
             />
           </div>
-          <Button className="w-full" disabled={pending} type="submit">
+          <Button className="w-full" disabled={!isConfigured || pending} type="submit">
             {pending ? "Please wait..." : "Sign in"}
           </Button>
         </form>

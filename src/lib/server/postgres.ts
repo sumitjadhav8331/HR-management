@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Pool, type QueryResult, types } from "pg";
+import { assertPostgresEnv, getPostgresConnectionString } from "@/lib/server/runtime-env";
 
 types.setTypeParser(1700, (value) => Number(value));
 
@@ -8,20 +9,12 @@ declare global {
   var __hrManagementPgPool: Pool | undefined;
 }
 
-function getConnectionString() {
-  const connectionString = process.env.DIRECT_URL || process.env.DATABASE_URL;
-
-  if (!connectionString) {
-    throw new Error("Postgres is not configured. Add DIRECT_URL or DATABASE_URL to .env.local.");
-  }
-
-  return connectionString;
-}
-
 export function getPostgresPool() {
   if (!global.__hrManagementPgPool) {
+    assertPostgresEnv();
+
     global.__hrManagementPgPool = new Pool({
-      connectionString: getConnectionString(),
+      connectionString: getPostgresConnectionString()!,
       ssl: {
         rejectUnauthorized: false,
       },
